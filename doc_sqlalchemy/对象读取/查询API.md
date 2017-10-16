@@ -360,7 +360,7 @@
 
     - `filter(*)`
 
-        把筛选标准拷贝到Query，用来生成SQL表达式。
+        把筛选标准拷贝到Query，使用(类似)SQL表达式的方式。
 
         比如：
 
@@ -374,5 +374,306 @@
         ```
 
     - `filter_by(**kwargs)`
+
+        把筛选标准拷贝到Query，使用关键字参数的方式。
+
+        比如：
+
+        `session.query(MyClass).filter_by(name="some name")`
+
+        多个标准也可以用逗号隔开；然后内部会自动使用`and_()`函数将它们组合起来：
+
+        ```python
+        session.query(MyClass).\
+                filter_by(name='some name', id=5)
+        ```
+
+        关键字参数提取查询中主实体的列来使用，之后的实体列需要使用`Query.join()`显式声明。
+
+    - `first()`
+
+        返回这个Query结果的首个行（row），或者在结果中不包含任何row时返回None。
+
+        first()在生成的SQL中使用了LIMIT 1，所以在服务端也只会生成一行数据。
+
+    - `from_self(*entities)`
+
+        返回一个Query，这个对象将会将SELECT的结果作为子查询。
+
+        本质上`Query.from_self()`将一个SELECT语句转向它本身。给定一个查询如：
+
+        `q = session.query(User).filter(User.name.like('e%'))`
+
+        给定`Query.from_self()`版本：
+
+        `q = session.query(User).filter(User.name.like('e%')).from_self()`
+
+        这个查询将会渲染：
+
+        ```python
+        SELECT anon_1.user_id AS anon_1_user_id,
+            anon_1.user_name AS anon_1_user_name
+        FROM (SELECT "user".id AS user_id, "user".name AS user_name
+        FROM "user"
+        WHERE "user".name LIKE :name_1) AS anon_1
+        ```
+
+        有很多情况使用`Query.from_self()`都很有用。一个简单的例子是，当你想要对我们查询的
+        结果做一个LIMIT行限制，然后对这个行限制后的结果使用join：
+
+        ```python
+        q = session.query(User).filter(User.name.like('e%')).\
+                limit(5).from_self().\
+                join(User.addresses).filter(Address.email.like('q%'))
+        ````
+
+        上面的查询会使用JOIN，但是只会针对User的前五行：
+
+        ```python
+        SELECT anon_1.user_id AS anon_1_user_id,
+               anon_1.user_name AS anon_1_user_name
+        FROM (SELECT "user".id AS user_id, "user".name AS user_name
+        FROM "user"
+        WHERE "user".name LIKE :name_1
+            LIMIT :param_1) as anon_1
+        JOIN address ON anon_1.user_id = address.user_id
+        WHERE address.email LIKE :email_1
+        ```
+
+        **自动aliasing**
+
+        `Query.from_self()`的另一个关键之处在于它对子查询内部的实体实现了*自动aliasing*，
+        可以继续在外层引用。上面例子中，如果我们想要继续引用User实体，这些引用将会按照子查询中
+        的实体引用：
+
+        ```python
+        q = session.query(User).filter(User.name.like('e%')).\
+                limit(5).from_self().\
+                join(User.addresses).filter(Address.email.like('q%')).\
+                order_by(User.name)
+        ```
+
+        ORDER BY子句使用的User.name是子查询内部实体的列：
+
+        ```python
+        SELECT anon_1.user_id AS anon_1_user_id,
+            anon_1.user_name AS anon_1_user_name
+        FROM (SELECT "user".id AS user_id, "user".name AS user_name
+        FROM "user"
+        WHERE "user".name LIKE :name_1
+         LIMIT :param_1) AS anon_1
+        JOIN address ON anon_1.user_id = address.user_id
+        WHERE address.email LIKE :email_1 ORDER BY anon_1.user_name
+        ```
+
+        自动aliasing的特性只有在受限的几种方式有效，比如简单的筛选和排序。更复杂的构造如
+        引用实体来JOIN需要使用显示的子查询对象，一般通过`Query.subquery()`生成的对象。
+        测试查询结构时必须看看生成的SQL来确保不会出乎意料的结果。
+
+        **改变实体**
+
+        `Query.from_self()`包含能够修改哪些列要被查询的特性。在之前的例子中，我们想要
+        在内部查询中子查询中查询`User.id`，所以我们可以在外部JOIN`Address`实体，
+        但是我们只想要外部查询返回`Address.email`列：
+
+        ```python
+        q = session.query(User).filter(User.name.like('e%')).\
+            limit(5).from_self(Address.email).\
+            join(User.addresses).filter(Address.email.like('q%'))
+        ```
+
+        生成的SQL：
+
+        ```python
+        SELECT address.email AS address_email
+        FROM (SELECT "user".id AS user_id, "user".name AS user_name
+        FROM "user"
+        WHERE "user".name LIKE :name_1
+            LIMIT :param_1) AS anon_1
+        JOIN address ON anon_1.user_id = address.user_id
+        WHERE address.email LIKE :email_1
+        ```
+
+        **查看内部／外部的列**
+
+        记住在引用一个列时这个列来自于子查询时，我们需要这个列出现在子查询的SELECT子句中；
+        这是SQL中最普通的部分。例如，如果我们想要使用`contains_eager()`来贪婪读取子查询，
+        我们需要加入这些列。下面使用User和Address来阐释:
+
+        ```python
+        q = session.query(Address).join(Address.user).\
+                filter(User.name.like('e%'))
+
+        q = q.add_entity(User).from_self().\
+                options(contains_eager(Address.user))
+        ```
+
+        我们在使用`Query.from_self()`之前使用了`Query.add_entity()`，所以在子查询中
+        出现了User的列。所以我们能够使用`contains_eager()`：
+
+        ```python
+        SELECT anon_1.address_id AS anon_1_address_id,
+           anon_1.address_email AS anon_1_address_email,
+           anon_1.address_user_id AS anon_1_address_user_id,
+           anon_1.user_id AS anon_1_user_id,
+           anon_1.user_name AS anon_1_user_name
+        FROM (
+            SELECT address.id AS address_id,
+                address.email AS address_email,
+                address.user_id AS address_user_id,
+                "user".id AS user_id,
+                "user".name AS user_name
+            FROM address JOIN 'user' ON 'user'.id = address.user_id
+            WHERE 'user'.name LIKE :name_1)
+            AS anon_1
+        ```
+
+        如果我们没有调用`add_entity(User)`, 而是直接使用`contains_eager()`来读取
+        User实体，会强制把这个表增加到外面而不会正确的join - 注意下面的`anon1, "user"`:
+
+        ```python
+        # 不正确的查询
+        SELECT anon_1.address_id AS anon_1_address_id,
+           anon_1.address_email AS anon_1_address_email,
+           anon_1.address_user_id AS anon_1_address_user_id,
+           "user".id AS user_id,
+           "user".name AS user_name
+        FROM (
+            SELECT address.id AS address_id,
+            address.email AS address_email,
+            address.user_id AS address_user_id
+        FROM address JOIN "user" ON "user".id = address.user_id
+        WHERE "user".name LIKE :name_1) AS anon_1, "user"
+        ```
+
+        参数：
+
+        - `*entities`: 可选参数，传入的实体会代替最终SELECT的列。
+
+    - `from_statement(statement)`
+
+        执行给定的SELECT语句并返回结果。
+
+        这个方法绕过所有内部语句编译，传入的语句可以无需修改地执行。
+
+        传入的参数应该是一个`text()`或者`select()`构造器生成的对象，返回的列集合应该
+        符合Query中实体类的列集合。
+
+    - `get(ident)`
+
+        根据给定的主键标识符返回实例，如果没有找到则返回None。
+
+        比如：
+
+        ```python
+        my_user = session.query(User).get(5)
+
+        some_object = session.query(VersionedFoo).get((5, 10))
+        ```
+
+        `get()`是特殊的，它可以直接访问Session的标识图。如果给定的主键标识符出现在本地的
+        (Session)标识图中，对象会直接返回而不用发出SQL，但是在对象标记为过期后就无效了。
+        如果主键标识没有出现在标识图中，将会发出一个SQL来取得对象。
+
+        `get()`在对象出现在标识图并且标记为过期时会执行一个检查 - 会发出一个SQL来刷新对象
+        以及确认这行(row)仍旧存在。如果没有，将会抛出一个`ObjectDeleteError`异常。
+
+        `get()`只能用来返回单个映射实例，不能返回多个实例或者单独的列对象，并且限制使用
+        单个主键值。原始的query()函数也必须这样构造，也就是必须传入单个实体并且没有额外的
+        筛选标准。通过`options()`读取选项可能会生效。
+
+        通过`relationship()`配置的惰性加载，多对一属性，使用简单的外键-主键标准，对它的
+        访问也会首先访问标识图而不是查询数据库。
+
+        参数：
+
+        - `ident`: 一个代表主键的标量或元组。对于混合主键，主键值的顺序应该和Table主键一样。
+
+        返回：
+
+        一个对象实例，或者`None`。
+
+    - `group_by(*criterion)`
+
+        对查询应用一个或多个GROUP BY标准，并且返回新的Query。
+
+        所有存在的GROUP BY设置都能够通过在使用这个方法并传入`None`来取消 - 这个取消
+        方式也能应用于ORDER BY。
+
+    - `having(criterion)`
+
+        对查询应用HAVING标准，并返回新的Query。
+
+        `having()`需要组合`group_by()`使用。
+
+        HAVING标准可以在分组的基础上使用过滤／聚集函数：
+
+        ```python
+        q = session.query(User.id).\
+                join(User.addresses).\
+                group_by(User.id).\
+                having(func.count(Address.id) > 2)
+        ```
+
+    - `instances(cursor, _Query__context=None)`
+
+        给定一个由`connection.execution()`返回的`ResultProxy`，返回一个ORM迭代
+        器版本的结果。
+
+        比如：
+
+        ```python
+        result = engine.execute("select * from users")
+        for u in session.query(User).instances(result):
+            print(u)
+        ```
+
+    - `intersect(*q)`
+
+        让一或多个查询针对这个Query生成一个INTERSECT。
+
+        运行原理和`union()`一样.
+
+    - `join(*props, **kwargs)`
+
+        对这个Query的对象使用一个JOIN SQL，返回一个新的Query。
+
+        **简单关系JOIN**
+
+        考虑两个映射`User`和`Address`，`User.addresses`代表和每个User关联的Address
+        对象。`join()`最常用于在这个关系中创建一个JOIN，使用`User.addresses`作为指示器
+        来说明两个表中哪个值相等：
+
+        `q = session.query(User).join(User.addresses)`
+
+        上面例子对`User.addresses`调用了`Query.join()`，将会发出以下SQL：
+
+        ```python
+        SELECT
+            user.*
+        FROM user JOIN address
+            ON user.id = address.user_id
+        ```
+
+        上面例子我们在`join()`引用的`User.addresses`出现在JOIN子句中，也就是会自动指定
+        ON的条件。对于以上案例的单实体查询(我们最开始只查询了User，没有其他实体)，关系同样可以
+        通过一个字符串名称来指定：
+
+        `q = session.query(User).join("addresses")`
+
+        `join()`同样支持多个"on子句"参数来组成JOIN链，比如下面我们JOIN了4个相关联的实体：
+
+        `q = session.query(User).join('orders', 'items', 'keywords')`
+
+        上面例子是3个独立`join()`的快捷方式，每次都用一个显式的属性字符串名称来指代真实实体：
+
+        ```python
+        q = session.query(User).
+                    join(User.orders).\
+                    join(User.items).\
+                    join(Item.keywords)
+        ```
+
+        **对目标实体或可选择对象(selectable)JOIN**
 
 
