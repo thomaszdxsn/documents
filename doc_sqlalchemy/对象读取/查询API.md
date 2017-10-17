@@ -676,4 +676,264 @@
 
         **对目标实体或可选择对象(selectable)JOIN**
 
+        第二种使用`join()`的方法允许任意的映射实体和Core中的可选择对象作为目标传入。在
+        这种用法中，`join()`会试图通过在两个实体的自然外键关系中创建一个JOIN：
 
+        `q = session.query(User).join(Address)`
+
+        如果上面的两个实体之间没有外键约束或者多个外键约束时，就会抛出一个错误。在上面的调用
+        形式中，`join()`调用后自动为我们创建了一个"ON子句"。传入的参数可以是任何可选择对象，
+        如`Table`:
+
+        `q = session.query(User).join(addresses_table)`
+
+        **对目标JOIN以及ON子句**
+
+        第三种形式的调用可以允许目标实体和ON子句显式传入。假设我们想要JOIN`Address`两次，
+        在第二次的时候使用alias。我们可以使用`aliased()`来区分Address不同的alias，
+        传参中使用`target, onclause`形式来JOIN它们，所以alias可以设定显式地设置ON子句
+        如何生成：
+
+        ```python
+        a_alias = aliased(Address)
+
+        q = session.query(User).\
+                join(User.addresses).\
+                join(a_alias, User.addresses).\
+                filter(Address.email_address == 'ed%foo.com').\
+                filter(Address.email_address == 'ed%bar.com')
+        ```
+
+        在上面例子中，生成的SQL类似于：
+
+        ```python
+        SELECT user.* FROM user
+            JOIN address ON user.id = address.user_id
+            JOIN address AS address_1 ON user.id=address_1.user_id
+            WHERE address.email_address =: email_address_1
+            AND address_1.email_address =: email_address_2
+        ```
+
+        对`join()`使用两个参数，可以让我们构建任意形式的SQL"ON"子句，不必依赖设置的关系：
+
+        ```python
+        q = session.query(User).join(Address, User.id == Address.user_id)
+        ```
+
+        **高级JOIN目标和适配(adaption)**
+
+        当使用`join()`选择"目标"时是有弹性空间的。就像之前提到的那样，它可以接受`Table`对象
+        和其它的可选择对象如`alias()`和`select()`，无论是使用一参数或两个参数形式：
+
+        ```python
+        addresses_q = select([Address.user_id]).\
+                    where(Address.email_address.endswith("%bar.com")).\
+                    alias()
+
+        q = session.query(User).\
+                join(addresses_q, addresses_q.user_id == User.id)
+        ```
+
+        `join()`同样具有适配`relationship()`的特性 - 自动根据可选择对象来决定ON子句。
+        下面例子中，我们构建了一个User对Address子查询的JOIN，在第二个参数传入relationship：
+        `User.addresses`来适配目标：
+
+        ```python
+        address_subq = session.query(Address).\
+                            filter(Address.email_address == 'ed@foo.com').\
+                            subquery()
+
+        q = session.query(User).join(address_subq, User.addresses)
+        ```
+
+        生成的SQL类似于：
+
+        ```python
+        SELECT user.* FROM user
+            JOIN (
+                SELECT address.id AS id,
+                    address.user_id AS user_id,
+                    address.email_address AS email_address
+                FROM address
+                WHERE address.email_address =: email_address_1
+            ) AS anon_1 ON user.id = anon_1.user.id
+        ```
+
+        上面的用法也可以使用显式ON子句方式来写：
+
+        ```python
+        q = session.query(User).\
+                joni(address_subq, User.id = address_subq.c.user_id)
+        ```
+
+        **控制JOIN对应的FROM**
+
+        `join()`可以控制JOIN的右侧，但是有时也需要可以控制左侧，碰到这种情况是，我们需要
+        使用`select_from()`。下面我们通过实体Address来构建一个查询，但是也可以通过设置
+        Query首先查询`User`来时这个查询可以使用`User.addresses`作为"on"子句:
+
+        ```python
+        q = session.query(Address).select_from(User).\
+                        join(User.addresses).\
+                        filter(User.name == 'ed')
+        ```
+
+        生成的SQL类似如下：
+
+        ```python
+        SELECT address.* FROM user
+            JOIN address ON user.id = address.user_id
+            WHERE user.name = :name_1
+        ```
+
+        **构建匿名的alias**
+
+        `join()`可以使用flag参数`aliased=True`来构建匿名aliases。这个特性在查询通过
+        算法joined的时候特别有用，比如一个任意深度的子引用查询。
+
+        ```python
+        q = session.query(Node).\
+                join("children", "children", aliased=True)
+        ```
+
+        当使用`aliased=True`时，真正的"alias"对象并不能显式的获取。类似`Query.filter()`
+        的方法使用刚收到的实体作为最后JOIN的点：
+
+        ```python
+        q = session.query(Node).\
+                join("children", "children", aliased=True).\
+                filter(Node.name == 'grandchild 1')
+        ```
+
+        当使用自动aliasing时，`from_joinpoint=True`可以在join()调用之间插入，允许
+        使用多节点join，所以每个path(节点)上面你都可以进一步筛选：
+
+        ```python
+        q = session.query(Node).\
+                join("children", aliased=True).\
+                filter(Node.name == 'child 1').\
+                join("children", aliased=True, from_joinpoint=True).\
+                filter(Node.name == 'grandchild 1')
+        ```
+
+        筛选节点可以通过`reset_joinpoint()`来重设为最开始的`Node`实体：
+
+        ```python
+        q = session.query(Node).\
+                join("children", "children", aliased=True).\
+                filter(Node.name == 'grandchild 1').\
+                reset_joinpoint().\
+                filter(Node.name == 'parent 1')
+        ```
+
+        对于`aliased=True`的例子，可以看看发布包的**XML持久化**，它解释了一个类Xpath
+        的查询系统是怎么使用算法join的。
+
+        参数：
+
+        - `*props`: 一个或多个JOIN条件的集合，用一个绑定关系的属性或者一个表示关系名称
+        的字符串用来代表"ON"子句，或者使用一个单独的目标实体，或者一个元组的参数形式
+        `(target, onclause)`，也可以传入两个参数形式的`target, onclause`。
+
+        - `aliased=False`: 如果为True，指明这个JOIN的目标应该使用匿名aliasing。随后的
+        比如`filter()`类似的标准方法将会以这个alias作为目标，直到调用`reset_joinpoint()`
+        ，目标将会重新改为query()中的主对象。
+
+        - `isouter=False`: 如果为True，JOIN将使用`LEFT OUTER JOIN`，就像使用
+        `Query.outerjoin()`方法一样。在Core中的`FromClause.join()`中同样有一个一样的
+        flag参数。
+
+        - `full=False`
+
+            使用`FULL OUTER JOIN`；隐式地一并使用了`isouter`。
+
+        - `from_joinpoint=False`
+
+            当使用`aliased=True`时，这个setting也设置为True可以让随后的filter()
+            使用最近的join目标为目标，而不是使用查询的原始FROM目标。
+
+    - `label(name)`
+
+        返回这个Query的一个完整表现形式，使用给定的name转换成一个带label的标量子查询。
+
+        类似的还有`sqlalchemy.sql.expression.SelectBase.label()`
+
+    - `limit(limit)`
+
+        对查询使用一个`LIMIT`，返回一个新的`Query`对象。
+
+    - `merge_result(iterator, load=True)`
+
+        合并一个结果(result)到这个`Query`对象的session。
+
+        给定的参数是一个结果和本查询一样的另一个Query返回的结果(result)，返回一个相同的
+        结果迭代器，所有的映射实例都将使用`Session.merge()`合并到session中。这是一个优化
+        的方法，用来合并所有的映射实例，相比对每个值显式调用`Session.merge()`，可以减少
+        (多次)方法调用的开销。
+
+        这个结果的结构取决于这个`Query`的Column列表 - 如果它们的结果不相符，将会抛出错误。
+
+        `load`参数和`Session.merge()`中的参数作用一样。
+
+        对于何时使用`merge_result()`，可以查看开发包的`Dogpile Caching`这个例子，
+        `merge_result()`在这里用来把一个缓存的状态高效的恢复到目标Session中。
+
+    - `offset(offset)`
+
+        对查询使用一个`OFFSET`，返回一个新的`Query`对象。
+
+    - `one()`
+
+        要么返回一个结果，要么抛出一个异常。
+
+        如果查询没有结果将抛出`sqlalchemy.orm.exc.NoResultFound`。
+
+        如果查询发现多个结果，将抛出`sqlalchemy.orm.exc.MultipleResultsFound`。
+
+        `one()`在最后一个Query使用。
+
+    - `one_or_none()`
+
+        返回一个结果，或返回`None`，或者抛出一个异常。
+
+        如果查询没有结果，返回`None`。如果查询找到多个结果，将会抛出一个
+        `sqlalchemy.orm.exc.MultipleResultsFound`。
+
+    - `options(*criterion)`
+
+        应用给定的映射器(mapper)选项(options)列表到查询中，返回一个新的Query。
+
+        大多数有关的选项(options)都是和关于如何改变column，关系映射属性如何读取。
+
+    - `order_by(*criterion)`
+
+        对查询应用一个或多个ORDER BY标准，返回一个新的Query。
+
+        所有的ORDER BY设置都可以通过传入一个`None`来阻止 - 在映射器中设置的ORDER BY
+        同样也可以阻止。
+
+        另外，传入`False`可以重置所有的ORDER BY，让默认的`mapper.order_by`重新生效。
+        但是`mapper.order_by`已经被废弃了。
+
+    - `outerjoin(*props, **kwargs)`
+
+        对Query对象创建一个LEFT OUTER JOIN，返回一个新的Query。
+
+        使用方法和`join()`相同。
+
+    - `params(*args, **kwargs)`
+
+        为`filter()`指定的参数绑定值。
+
+        参数可以使用关键字参数传入，或者可以直接传入一个字典作为首个位置参数。原因是虽然
+        `**kwargs`很方便，然而一些属性字典包含unicode键，这将导致`**kwargs`不能用。
+
+    - `populate_existing()`
+
+        返回一个Query，将会过期和刷新所有实例，像它们被读取过一样，或者重用当前Session
+        中的实例。
+
+        ORM正常使用时并不推荐使用`populate_existing()` - Session对象能够自动管理
+        实例的状态。这个方法不适用于一般的情况。
+
+    -
