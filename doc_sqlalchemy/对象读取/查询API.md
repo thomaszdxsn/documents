@@ -936,4 +936,100 @@
         ORM正常使用时并不推荐使用`populate_existing()` - Session对象能够自动管理
         实例的状态。这个方法不适用于一般的情况。
 
-    -
+    - `prefix_with(*prefixes)`
+
+        对查询应用前缀，并返回一个新的Query。
+
+        参数：
+
+        - `*prefixes`: 可选的前缀，一般是字符串，不能使用逗号。在针对MySQl关键字时很有用。
+
+        比如：
+
+        ```python
+        query = session.query(User.name).\
+            prefix_with('HIGN_PRIORITY).\
+            prefix_with("SQL_SMALL_RESULT", "ALL")
+        ```
+
+        将会生成如下SQL：
+
+        ```python
+        SELECT HIGH_PRIORITY SQL_SMALL_RESULT ALL user.name AS users_name
+        FROM users
+        ```
+
+    - `reset_joinpoint()`
+
+        "JOIN点(point)"重设为原始FROM中的实体，返回一个新的Query。
+
+        这个方法通常在`join(aliased=True)`时使用。这个方法会把"JOIN点"设置为最近的
+        一个JOIN目标。`reset_joinpoint()`就是用来重设"JOIN点"的。
+
+    - `scalar()`
+
+        返回第一个结果的第一个元素。如果查询发现多个行，将会抛出一个`MultipleResultsFound`。
+
+        ```python
+        >>> session.query(Item).scalar()
+        <Item>
+        >>> session.query(Item.id).scalar()
+        1
+        >>> session.query(Item.id).filter(Item.id < 0).scalar()
+        None
+        >>> session.query(Item.id, Item.name).scalar()
+        1
+        >>> session.query(func.count(Parent.id)).scalar()
+        20
+        ```
+
+        这个方法应用于最后一个Query。
+
+    - `select_entity_from(from_obj)`
+
+        设置这个查询的FROM为一个Core可选择对象。
+
+        `Query.select_entity_from()`提供了使用`aliased()`的一个替代方式。相比于
+        显式的引用`aliased()`对象，`Query.select_entity_from()`自动采用所有出现的
+        实体作为选择对象。
+
+        先看一个`aliased()`的例子：
+
+        ```python
+        select_stmt = select([User]).where(User.id == 7)
+        user_alias = aliased(User, select_stmt)
+
+        q = session.query(user_alias).\
+                filter(user_alias.name == 'ed')
+        ```
+
+        上面例子，我们显式传入`user_alias`对象到查询中。但是很多地方并不能显式引用`user_alias`,
+        `Query.select_entity_from()`可以用在查询的开始，将现存的User实体用作alias：
+
+        ```python
+        q = session.query(User).\
+                select_entity_from(select_stmt).\
+                filter(User.name == 'ed')
+        ```
+
+        上面例子中，生成的SQL将会显式User实体适配到我们的语句中，即使是用在FROM子句：
+
+        ```python
+        SELECT anon_1.id AS anon_1_id, anon_1.name AS anon_1_name
+        FROM (SELECT "user".id AS id, "user".name AS name
+              FROM "user"
+              WHERE "user".id = :id_1) AS anon_1
+        WHERE anon_1.name = :name_1
+        ```
+
+        `Query.select_entity_from()`方法类似于`Query.select_from()`方法，都是
+        设置查询中的FROM子句。不同之处在于它会自动采用主实体作为传入alias的引用对象。如果
+        上面例子中换成了`Query.select_from()`，那么生成的SQL会变成这样：
+
+        ```python
+
+        ```
+
+
+
+
