@@ -1027,8 +1027,316 @@
         上面例子中换成了`Query.select_from()`，那么生成的SQL会变成这样：
 
         ```python
-
+        # 使用select_from()，而不是select_entity_from()
+        # 加入的实体/aliased将会作为JOIN子查询对象
+        SELECT "user".id AS user_id, "user".name AS user_name
+        FROM "user", (SELECT "user".id AS id, "user".name AS name
+                    FROM "user"
+                    WHERE "user".id = :id_1) AS anon_1
+        WHERE "user".name = :name_1
         ```
+
+        想用在`Query.select_entity_from()`使用文本型SQL，我们可以使用`text()`构造器。
+        但是，`text()`需要符合我们实体中的列，可以使用`TextClause.columns()`方法来辅助实现：
+
+        ```python
+        text_stmt = text("select id, name from user").columns(
+            User.id, User.name
+        )
+
+        q = session.query(User).select_entity_from(text_stmt)
+        ```
+
+        `Query.select_entity_from()`本身接受一个`aliased()`对象，所以`aliased()`
+        的特殊选项比如`aliased.adapt_on_names`可以用在前者方法的改编版本。
+
+        假设一个视图`user_view`同样返回`user`中的行,如果我们反射这个视图到一个`Table`中，
+        这个视图没有我们映射的Table的关系，但是我们可以使用名称匹配的方式来查询：
+
+        ```python
+        user_view = Table("user_view", metadata,
+                        autoload_with=engine)
+
+        user_view_alias = aliased(
+            User, user_view, adapt_on_names=True)
+        q = session.query(User).\
+                select_entity_from(user_view_alias).\
+                order_by(User.name)
+        )
+        ```
+
+        参数：
+
+        - `from_obj`: 一个`FromClause`对象，它将会替换这个查询的FROM子句。同样可以
+        传入一个`aliased()`对象。
+
+    - `select_from(*from_obj)`
+
+        显式设置Query的FROM子句。
+
+        `Query.select_from()`通常结合`Query.join()`使用，用来控制使用哪个实体作为
+        JOIN的左侧实体。
+
+        多数时候调用`join()`左侧的实体对象能够决定一个查询的查询效率，如果没有设置join点，
+        通常默认的join点是Query对象被选择的实体列表的最左边的一个实体。
+
+        一个典型的例子是：
+
+        ```python
+        q = session.query(Address).select_from(User).\
+                join(User.addresses).\
+                filter(User.name == 'ed')
+        ```
+
+        生成的SQL如下：
+
+        ```python
+        SELECT address.* FROM user
+        JOIN address ON user.id == address.user_id
+        WHERE user.name = :name_1
+        ```
+
+        参数：
+
+        - `*from_obj`: 子查询应用的一个或多个实体集合。实体可以是映射类，`AliasedClass`
+        对象，`Mapper`对象以及使用Core中的`FromClause`用作子查询。
+
+        > 注意
+        >> v0.9以后：这个方法不再可以通过传入匹配实体的可选择对象当作FROM子句；可以选择使用
+        `select_entity_from()`这个方法来替代。
+
+    - `selectable`
+
+        通过这个Query发出的查询返回一个`Select`对象。
+
+        兼容使用`inspect()`，等同于：
+
+        `query.enable_eagerloads(False).with_labels().statement`
+
+    - `slice(start, stop)`
+
+        通过给定的索引计算Query的切片，并返回一个新的Query。
+
+        start和stop索引类似于Python内置的函数`range()`，这个方法集合了LIMIT和OFFSET
+        的使用。
+
+        举例来说：
+
+        `session.query(User).order_by(User.id).slice(1, 3)`
+
+        生成的SQL：
+
+        ```python
+        SELECT users.id AS users_id,
+               users.name AS users_name
+        FROM users ORDER BY users.id
+        LIMIT ? OFFSET ?
+        (2, 1)
+        ```
+
+    - `statement`
+
+        这个Query代表的完整的SQL语句。
+
+        这个语句默认并没有消除歧义的标签(label)，除非之前调用了`with_labels(True)`。
+
+    - `subquery(name=None, with_labels=False, reduce_columns=False)`
+
+        返回代表这个查询的完整SQL语句，嵌入到一个SQL中。
+
+        对这个查询不能生成贪婪JOIN。
+
+        参数：
+
+        - `name`: 赋给alias的字符串名称；将会传入到`FromClause.alias()`中。如果值
+        为None，将会根据编译时间生成一个名称。
+
+        - `with_labels`： 如果为True，将会首先为查询调用`with_labels()`，对所以列
+        生成表级别的标签。
+
+        - `reduce_columns`: 如果为True，`Select.reduce_columns()`将会对返回的
+        `select()`结果调用，移除一些同样名称的列。
+
+    - `suffix_with(*suffixes)`
+
+        对查询加入后缀并返回新的Query。
+
+        参数：
+
+        - `*suffixes`: 可选的后缀，一般为字符串，不能有任何逗号。
+
+    - `union(*q)`
+
+        对这个查询以及其它的一个或多个查询应用UNION。
+
+        比如：
+
+        ```python
+        q1 = session.query(SomeClass).filter(SomeClass.foo == 'bar')
+        q2 = session.query(SomeClass).filter(SomeClass.bar == 'foo')
+
+        q3 = q1.union(q2)
+        ```
+
+        这个方法可以接受多个Query对象，所以能够控制嵌套的深度。连续的`union()`调用如：
+
+        `x.union(y).union(z).all()`
+
+        生成的SQL为：
+
+        ```python
+        SELECT * FROM (SELECT * FROM (SELECT * FROM X UNION
+                SELECT * FROM y) UNION SELECT * FROM Z)
+        ```
+
+        另外：
+
+        `x.union(y, z).all()`
+
+        生成的SQL：
+
+        ```python
+        SELECT * FROM (SELECT * FROM X UNION SELECT * FROM y UNION
+                SELECT * FROM Z)
+        ```
+
+        注意很多数据库不允许对UNION，EXCEPT等等使用ORDER BY。想要取消所有在映射器中设置
+        的ORDER BY子句，可以使用`order_by(None)` - 返回的Query结果不会在有ORDER BY
+        子句。
+
+    - `union_all(*q)`
+
+        对这个查询以及其它的一个或多个查询应用UNION ALL。
+
+        原理和用法与`union()`一样。
+
+    - `update(values, synchronize_session='evaluate', update_args=None)`:
+
+        执行一个批量更新操作。
+
+        更新数据库中匹配这个查询的所有行。
+
+        比如：
+
+        ```python
+        session.query(User).filter(User.age == 25).\
+            update({User.age: User.age - 10}, synchronize_session=False)
+
+        session.query(User).filter(User.age == 25).\
+            update({"age": User.age - 10}, synchronize_session='evaluate')
+        ```
+
+        参数：
+
+        - `values`
+
+            一个字典，以属性名称，或者映射属性，或者SQL表达式作为键名，以字面量值或者SQL
+            表达式作为值。如果需要`parameter-ordered model`，这个值可以传入二维元组
+            的列表；这需要在参数`Query.update.update_args`传入
+            `preserve_parameter_order`。
+
+        - `synchronize_session`
+
+            选择session中对象属性更新的策略。合理的值为：
+
+            - `False`: 并不同步到session中。这个选项在session马上要过期(使用
+            `commit()`或`expire_all()`之后)的时候使用会获得高性能而没有副作用。
+            在session过期之前，session中的值保持不变，小心处理，不然会导致一些混淆型的后果。
+
+            - `fetch`: 在更新执行执行一个select找到匹配的对象。这个更新的属性将会替代
+            匹配的对象。
+
+            - `evaluate`: 对session的对象使用Python的方式估算Query标准。
+
+            目前，表达式估算器并不会根据数据库而改变字符串比对(collation)方法。
+
+        - `update_args`
+
+            可选的字典，如果传入这个参数，将会在底层传入`update()`构造器的`**kw`参数。
+            可能用来传入方言特性参数如`mysql-limit`，以及其它的特殊参数如
+            `preserve_parameter_order`。
+
+        返回：
+
+        根据数据库的"行计数(row count)"特性返回匹配的行计数值。
+
+        > 警告
+        >> - 这个方法并不支持Python中的关系级联 - 它假定所有的外键引用都设置了**ON UPDATE CASCADE**，
+        否则可能会抛出一个完整性约束错误。在UPDATE之后，根据Session中的对象是否实现ON UPDATE CASCADE，
+        可能并不会包含当前的状态。
+        >> - `fetch`策略将会发出额外的SELECT语句，这可能会严重影响性能。
+        >> - `evaluate`策略会对Session中的匹配对象执行一次扫描；如果Session中的内容
+        过期了，比如调用了`session.commit()`之后，**会对每个匹配对象执行一个SELECT查询**。
+        >> - 这个方法支持多表更新，这个行为并不会支持joined继承或者其它多表映射。例子：
+        >>     ```python
+        >>      session.query(Enginner).\
+        >>          filter(Enginner.id == Employee.id).\
+        >>          filter(Employee.name == 'dilbert').\
+        >>          update({"engineer_type": "programmer"})
+        >>     ```
+        >> - 多态实体WHERE标准并不会包含single或者joined更新 - 必须手动添加，即使
+            在单表继承中
+        >> - `MapperEvents.before_update()`和`MapperEvents.after_update()`事件
+        并不会在这个方法中被调用。对于这个方法提供了一个`SessionEvents.after_bulk_update()`方法。
+
+    - `value`
+
+        返回一个符合给定列表达式的结果标量。
+
+    - `values`
+
+        返回一个符合给定列表达式的结果迭代器。
+
+    - `whereclause`
+
+        一个只读的属性，它返回当前查询的WHERE子句。
+
+        返回的结果是一个SQL表达式构造，如果没有查询标准则返回None。
+
+    - `with_entities(*entities)`
+
+        通过给定的实体替换原来的SELECT列表，并且返回新的Query。
+
+        例子：
+
+        ```python
+        # Users，通过一些任意的标准来筛选然后通过相关的邮件地址来排序
+        q = (session.query(User)
+                    .join(User.address)
+                    .filter(User.name.like('%ed%'))
+                    .order_by(Addreess.email))
+
+        # 限制User.id == 5, Address.email以及'q'，接下来会返回什么？
+        subq = (q.with_entities(Address.email)
+                 .order_by(None)
+                 .filter(User.id == 5)
+                 .subquery())
+        q = q.join((subq, subq.c.email < Address.email)).limit(1)
+        ```
+
+    - `with_for_update(read=False, nowait=False, of=None, skip_locaked=False, key_share=False)`
+
+        对`FOR UPDATE`子句设定选项并返回一个新的Query。
+
+        这个方法的行为等同于`SelectBase.with_for_update()`。如果不适用参数调用，结果中
+        的`SELECT`语句将追加一个`FOR UPDATE`子句。当有参数传入时，数据库端特定选项如
+        `FOR UPDATE NOWAIT`或者`LOCK IN SHARE MODE`将会生效.
+
+        例如：
+
+        `q = session.query(User).with_for_update(nowait=True, of=User)`
+
+        上面的查询在PostgreSQL将会生成如下的SQL：
+
+        ```python
+        SELECT users.id AS users_id
+        FROM users
+            FOR UPDATE OF users NOWAIT
+        ```
+
+    - `with_hint(selectable, text, dialect_name=""`
+
+        pass
 
 
 
