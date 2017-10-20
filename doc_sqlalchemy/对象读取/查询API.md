@@ -1336,8 +1336,152 @@
 
     - `with_hint(selectable, text, dialect_name=""`
 
-        pass
+        对查询中指定的实体或可选择对象加入一个索引或其他执行上下文提示(executional context hint)
+
+        `selectable`可以是一个`Table`，`Alias`或者ORM实体／映射类。
+
+    - `with_labels()`
+
+        对`Query.statement`返回的值应用列标签。
+
+        指明Query语句访问器对所有列添加`<tablename>_<columnname>`形式的列标签；一般用于
+        多表具有同名列时消除歧义列。
+
+        当查询发出SQL取回数据行时，总是使用列标签。
+
+        > 注意
+        >> `Query.with_labels()`方法只应用于`Query.statement`的输出，并不会应用
+        Query的其它行结果调用系统，比如`Query.first()`，`Query.all()`等等。想要使用
+        `Query.with_labels()`来执行一个查询，使用`Session.execute()`来执行
+        `Query.statement`：
+        >>
+        >> `result = session.execute(query.with_lables().statement)`
+
+    > `with_lockmode(mode)`
+
+        返回一个特定"锁模型"的新查询，本质上引用了`FOR UPDATE`子句。
+
+        > v0.9: 被`Query.with_for_update()`取代。
+
+        参数：
+
+        - `mode`: 一个代表合法锁模式的字符串：
+
+            - `Node`: 转译为无锁模式
+            - `update`: 转译为`FOR UPDATE`(标准SQL，被大多数方言支持）
+            - `update_nowait`: 转译为`FOR UPDATE NOWAIT`(Oracle，PostgreSQL8.1以上支持)
+            - `read`: 转译为`LOCK IN SHARE MODE`(MySQL), 以及`FOR SHARE`(PostgreSQL)
+
+    - `with_parent(instance, property=None, from_entity=None)`
+
+        增加筛选标准，并关联给定的实例为一个子对象或者集合，使用它的属性状态以及一个建立好
+        的`relationship()`配置。
+
+        这个方法使用`with_parent()`函数来生成子句，结果将会传入`Query.filter()`。
+
+        接受的参数和`with_parent()`函数一样，有种例外情况可以让property为None，这种
+        情况查询将会对Query的目标映射器执行搜索。
+
+        参数：
+
+        - `instance`: 一个配置`relationship()`的实例。
+        - `property`: 字符串property名称，或者类绑定属性，它指定实例中的哪个关系用来
+            构建父／子关系。
+        - `from_entity`: 考虑设置为左侧的实体。默认的Query本身为"零"实体。
+
+    - `with_polymorphic(cls_or_mappers, selectable=None, polymorphic_on=None)`
+
+        读取继承类的列。
+
+        ...
+
+    - `with_session(session)`
+
+        使用给定的Session来返回一个Query。
+
+        虽然`Query`通常使用`Session.query()`来实例化，但是不使用Session转而直接构建
+        `Query`也是可行的。比如一个`Query`对象，或者已经关联其他`Session`的`Query`,
+        可以使用这个方法关联目标session并生成一个新的Query对象：
+
+        ```python
+        from sqlalchemy.orm import Query
+
+        query = Query([MyClass]).filter(MyClass.id == 5)
+
+        result = query.with_session(my_session).one()
+        ```
+
+    - `with_statement_hint(text, dialect_name='*')`
+
+        对这个`Select`增加一个语句提示。
+
+        这个方法类似于`Select.with_hint()`除了它并不需要一个单独的表，而是把整个语句
+        当成一个表。
+
+    - `with_transformation(fn)`
+
+        通过给定的函数变形并返回一个新的Query。
+
+        例如：
+
+        ```python
+        def filter_something(criterion):
+            def transform(q):
+                return q.filter(criterion)
+            return transform
+
+        q = q.with_transformation(filter_something(x==5))
+        ```
+
+        这个方法可以用来一些专门的Query对象的创建方式。
+
+    - `yield_per(count)`
+
+        一次只返回`count`行(迭代器)。
+
+        这个方法用于大数据集(大于1万行)，这个方法将结果分批装入子集合并一次性生成它的这
+        部分子集合，所以Python解释器不需要一次性一次性声明非常大的内存空间，可以在相同的
+        时间消耗下减少内存的使用。在读取成百上千行时性能的提升更加显著。
+
+        `Query.yield_per()`方法**在使用集合时不兼容subquery贪婪读取或者joinedload
+        贪婪读取**。它可能兼容**select in**贪婪读取，取决于数据库驱动。
+
+        因此在一些例子中，禁用贪婪读取会很有用，而不是无条件的使用`Query.enable_eagerloads()`:
+
+        `q = session.query(Object).yield_per(100).enable_eagerloads(False)`
+
+        或者可以使用`lazyload()`；比如使用星号来重置为默认读取器模式：
+
+        ```python
+        q = session.query(Object).yield_per(100).\
+                options(lazyload('*'), joinedload(Object.some_related))
+        ```
+
+        > 警告
+        >> 使用这个方法需要小心；如果一个实例出现在多于一个的"行批"中，客户端对属性的修改
+            将会被覆盖。
+        >>
+        >> 因为集合在随后的结果批读取时会被清除，通常不可能使用这个配置组合贪婪读取的集合。
+        >>
+        >> 同样要注意`yield_per()`也会设置`stream_results=True`，但是目前来说只有
+        `psycopg2`, `mysqldb`, `pymysql`方言可以理解并可以使用服务端游标代替预先缓冲
+        来生成流式结果。其它的DBAPI都会预先缓冲所有的行。这个用法的内存消耗远小于ORM映射对象。
 
 
+## ORM特定的Query构造
+
+- `sqlalchemy.orm.aliased(element, alias=None, name=None, flat=False, adapt_on_names=False)`
+
+    对给定的elemetn生成一个alias，通常是一个`AliasedClass`实例。
+
+    例如：
+
+    ```python
+    my_alias = aliased(MyClass)
+
+    session.query(MyClass, my_alias).filter(MyClass.id > my_alias.id)
+    ```
+
+    pass
 
 
