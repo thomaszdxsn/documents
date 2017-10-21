@@ -1482,6 +1482,318 @@
     session.query(MyClass, my_alias).filter(MyClass.id > my_alias.id)
     ```
 
-    pass
+    `aliased()`函数用来创建一个专门的可选择对象。默认情况，一个可选择对象通常通过对一个
+    普通的映射可选择对象（比如`Table`）使用`FromClause.alias()`方法来生成。但是，
+    `aliased()`同样可以把一个类关联一个新的`select()`语句。另外，`with_polymorphic()`
+    函数是`aliased()`的变种，用来指定所谓的"多态可选择对象"。
+
+    处于方便，`aliased()`函数同样接受一般的`FromClause`构造，比如`Table`或者`select()`。
+    在这种情况下，会调用`FromClause.alias()`方法并返回一个新的`Alias`对象。在这种情况下，
+    返回的Alias不是ORM映射。
+
+    参数：
+
+    - `element`: 想要aliased的元素。一般为一个映射类，但是处于方便的原因也可以传入一个
+            `FromClause`元素。
+    - `alias`: 默认情况，会对映射表生成一个简单的匿名alias。
+    - `name`: 如果没有指定`alias`参数，用来当作这个alias的字符串名称。
+    - `flat`: 布尔值。
+    - `adapt_on_names`: 如果为True，给定的可选择对象的映射列映射时的"匹配"会更加宽容：
+
+        ```python
+        class UnitPrice(Base):
+            __tablename__ = 'unit_price'
+            ...
+            unit_id = Column(Integer)
+            price = Column(Numeric)
+
+        aggregated_unit_price = Session.query(
+                                    func.sum(UnitPirce.price).label('price')
+                                ).group_by(UnitPrice.unit_id).subquery()
+
+        aggregated_unit_price = aliased(UnitPrice,
+                                    alias=aggregated_unit_price, adatp_on_names=True)
+        ```
+
+        上面例子中，访问`aggregated_unit_price`的`.price`属性将会返回
+        `func.sum(UnitPrice.price).label('price')`列，应为它匹配了名称"price"。
+        如果没有第二个语句，访问price并不会匹配之前的label。
+
+- `sqlalchemy.orm.util.AliasedClass(cls, alias=None, name=None, flat=False, adapt_on_names=False, with_polymorphic_mappers=(), with_polymorphic_discriminator=None, base_alias=None, use_mapper_path=False, represents_outer_join=False`
+
+    代表使用Query时一个映射类的"alias"形式。
+
+    这个ORM的类等同于`sqlalchemy.sql.expression.alias()`，这个对象通过`__getattr__`
+    来模仿映射类，并且对真正的Alias对象维持一份引用。
+
+    一般通过`orm.aliased()`，或者`with_polymorphic()`来使用。
+
+    使用例子：
+
+    ```python
+    # 找到所有具有相同名称的user对
+    user_alias = aliased(User)
+    session.query(User, user_alias).\
+            join((user_alias, User.id > user_alias.id)).\
+            filter(User.name == user_alias.name)
+    ```
+
+    返回的对象是一个`AliasedClass`实例。这个对象实现了属性模式，它维持了对原始类相同的
+    属性和方法接口，让`AliasedClass`可以兼容原始类的任何属性技术，包括hybird属性。
+
+    `AliasedClass`可以通过使用`inspect()`查询它的底层Mapper，aliased可选择对象，
+    以及其它信息:
+
+    ```python
+    from sqlalchemy import inspect
+
+    my_alias = aliased(MyClass)
+    insp = inspect(my_alias)
+    ```
+
+    返回的inspect对象是`AliasedInsp`的一个实例。
+
+- `sqlalchemy.orm.util.AliasedInsp(entity, mapper, selectable, name, with_polymorphic_mappers, polymorphic_on, _base_alias, _use_mapper_path, adapt_on_names, represents_outer_join)`
+
+    基类： `sqlalchemy.orm.base.InspectionAttr`
+
+    对`AliasedObject`对象提供一个查询接口。
+
+    ```python
+    from sqlalchemy import inspect
+    from sqlalchemy.orm import aliased
+
+    my_alias = aliased(MyMappedClass)
+    insp = inspect(my_alias)
+    ```
+
+    `AliasedInsp`的属性包括：
+
+    - `entity`: 代表`AliasedClass`
+    - `mapper`: 底层类的映射`Mapper`
+    - `selectable`: 一个Alias构造，它代表一个aliased后的Table或Select
+    - `name`: alias的名称。在Query返回的结果元组中它也作为属性名使用
+    - `with_polymorphic_mappers`: 这个AliasedClass的select中出现的所有映射器的集合。
+    - `polymorphic_on`: 一个供替换的列或者SQL表达式，用来在多态读取中当作区分符。
+
+- `sqlalchemy.orm.query.Bundle(name, *exprs, **kw)`
+
+    基类: `sqlalchemy.orm.base.InspectionAttr`
+
+    一个命名空间下的一个Query返回的一组SQl表达式。
+
+    `Bundle`本质上允许一个列基础的Query对象返沪嵌套的元组基础结果。可以通过简单的继承来扩展，
+    主要能够覆盖如何返回SQL表达式组，允许一些后期处理以及自定义的返回类型，而不用调用ORM类。
+
+    - `__init__(name, *exprs, **kw)`
+
+        构建一个新的`Bundle`。
+
+        例如：
+
+        ```python
+        bn = Bundle("mybundle", MyClass.x, MyClass.y)
+
+        for row in session.query(bn).\
+                filter(bn.c.x == 5).\
+                filter(bn.c.y == 4):
+            print(row.mybundle.x, row.mybundle.y)
+        ```
+
+        参数:
+
+        - `name`: 这个bundle的名称
+        - `*exprs`: 构成这个bundle的SQL表达式或者列
+        - `single_entity=False`: 如果为True，这个Bundle的行可以以"单实体"形式返回，没有额外的元组包裹
+
+    - `c=None`
+
+        一个`Bundle.columns`的别称。
+
+    - `columns=None`
+
+        这个Bundle引用的SQL表达式的命名空间。
+
+        比如：
+
+        ```python
+        bn = Bundle("mybundle", MyClass.x, MyClass.y)
+
+        q = session.query(bn).filter(bn.c.x == 5)
+        ```
+
+        支持嵌套的bundles:
+
+        ```python
+        b1 = Bundle('b1',
+                Bundle('b2', MyClass.a, MyClass.b),
+                Bundle('b3', MyClass.x, MyClass.y)
+             )
+
+        q = session.query(b1).\
+                filter(b1.c.b2.c.a == 5).\
+                filter(b1.c.b3.c.y == 9)
+        ```
+
+    - `create_row_processor(query, procs, labels)`
+
+        对这个Bundle生成一个"行处理(row processing)"函数。
+
+        可以通过继承来重写这个方法。
+
+    - `label(name)`
+
+        将这个Bundle拷贝并传入一个新的标签中。
+
+    - `single_entity=False`
+
+        如果为True，对单个Bundle的查询将会当作单个实体来返回，而不是一个键名元组(KeyedTuple)的实例。
+
+
+- `sqlalchemy.util.KeyedTuple`
+
+    基类： `sqlalchemy.util._collections.AbstractKeyedTuple`
+
+    `tuple`的子类，加入了label名称访问的特性。
+
+    比如：
+
+    ```python
+    >>> k = KeyedTuple([1, 2, 3], labels=['one', 'two', 'three']
+    >>> key.one
+    1
+    >>> key.two
+    2
+    ```
+
+    包含多个ORM实体的Query返回的结果行。
+
+    `KeyedTuple`的特性和Python标准库的`collections.namedtuple()`类似，然而它们的
+    结构不一样。不像`collections.namedtuple()`，`KeyedTuple`并不依赖创建时子类继承并定义字段名，
+    每个`KeyedTuple`实例都"原地"接受它的键名列表。`collections.namedtuple()`的子类方法
+    将会增加巨大的复杂度和性能开销，并不适用于Query的使用场景。
+
+    > v0.8: 兼容了`collections.namedtuple()`的方法, `KeyedTuple._fields`和
+    `KeyedTuple._asdict()`
+
+    - `_asdict()`
+
+        将这个`KeyedTuple`的内容以字典形式返回。
+
+        这个方法兼容自`collections.namedtuple()`，例外之处是它返回的字典并不是排序的。
+
+    - `_fields`
+
+        返回这个`KeyedTuple`的字符串键名元组。
+
+        这个方法也是兼容自`collections.namedtuple()`
+
+    - `keys()`
+
+        返回这个`KeyedTuple`的字符串键名列表。
+
+
+- `sqlalchemy.orm.strategy_options.Load(entity)`
+
+    基类：`sqlalchemy.sql.expression.Generative, sqlalchemy.orm.interfaces.MapperOption`
+
+    代表读取器选项，修改一个Query的状态，用来影响各种映射属性的读取。
+
+    `Load`对象多数时候在幕后创建，比如使用`joinedload()`，`defer()`这些方法后。但是，
+    `Load`对象也可以直接使用，有些时候直接创建会很有用。
+
+    想要直接使用`Load`，把一个映射类作为参数来实例化它。在Query有多个实体的时候很有用：
+
+    `myopt = Load(MyClass).joinedload('widgets')`
+
+    上面的`myopt`现在可以用在`Query.options()`，只对`MyClass`实体生效：
+
+    `session.query(MyClass, MyOtherClass).options(myopt)`
+
+    对一个类可以使用Load并指定通配符来当作公共接口：
+
+    `session.query(Order).options(Load(Order).lazyload('*'))`
+
+    上面例子中，Order的所有关系都会惰性读取，但是它所有后代对象的属性都会使用它们的默认读取器策略。
+
+    - `baked_lazyload(loadopt, attr)`
+
+    - `contains_eager(loadopt, attr, alias=None)`
+
+    - `defaultload(loadopt, attr)`
+
+    - `defer(loadopt, key)`
+
+    - `immediateload(loadopt, attr)`
+
+    - `joinedload(loadopt, attr, innerjoin=None)`
+
+    - `lazyload(loadopt, attr)`
+
+    - `load_only(loadopt, *attrs)`
+
+    - `noload(loadopt, attr)`
+
+    - `raiseload(loadopt, attr, sql_only=False)`
+
+    - `selectin_polymorphic(loadopt, classes)`
+
+    - `selectinload(loadopt, attr)`
+
+    - `subqueryload(loadopt, attr)`
+
+    - `undefer(loadopt, key)`
+
+    - `undefer_group(loadopt, name)`
+
+    - `with_expression(loadopt, key, expression)`
+
+
+- `sqlalchemy.orm.join(left, right, onclause=None, isouter=False, full=False, join_to_left=None)`
+
+    在left和right子句之间生成一个内联JOIN。
+
+    `orm.join()`是core接口`sql.expression.join()`的一个扩展，left和right并不只包含
+    core的可选择对象如`Table`，也可以接受映射类或者`AliasedClass`实例。oncluase同样
+    可以是一个SQL表达式，或者一个`relationship()`引用的属性名或者字符串名称。
+
+    `orm.join()`并不适合一般的用法，它的功能已经封装到了`Query.join()`方法。显式地在ORM
+    中使用`orm.join()`可以用在`Query.select_from()`中：
+
+    ```python
+    from sqlalchemy.orm import join
+
+    session.query(User).\
+        select_from(join(User, Address, User.addresses)).\
+        filter(Address.email_address=='foo@bar.com')
+    ```
+
+    上面的例子可以写的更加简洁：
+
+    ```python
+    session.query(User).\
+        join(User.addresses).\
+        filter(Address.email_addresses == 'foo@bar.com')
+    ```
+
+- `sqlalchemy.orm.outerjoin(left, right, oncluase=None, full=False, join_to_left=None)`
+
+    在left和right之间生成一个"LEFT OUTER JOIN"
+
+    这是`orm.join()`函数的OUTER JOIN版本。
+
+- `sqlalchemy.orm.with_parent(instance, prop, from_entity=None)`
+
+    对这个查询的主实体和给定的关联实例通过配置的`relationship()`创建筛选标准。
+
+    生成的SQL就像使用惰性读取器一样。
+
+    参数：
+
+    - `instance`: 一个具有`relationship()`的实例。
+
+    - `property`: 字符串属性名称，后者类绑定属性。
+
+    - `from_entity`：左侧的实体
 
 
