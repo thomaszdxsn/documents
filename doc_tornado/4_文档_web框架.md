@@ -813,8 +813,93 @@ class WebDAVHanlder(RequestHandler):
 
     参数：
 
-    - `pattern`: pass
+    - `pattern`: 用来匹配的正则表达式。任何的捕获组都会传入handler的`get/post/etc`
+        HTTP方法中。命名捕获组以关键字参数形式传入，非命名捕获组以位置参数形式传入。
 
+    - `handler`: 想要调用的`RequestHandler`子类。
+
+    - `kwargs`(可选): 传入handler构造器的额外参数字典。
+
+    - `name`(可选): 这个handler的名称。供`reverse_url`使用。
+
+    这个类同样可以在`tornado.web.url`模块下面获取。
+
+
+### 装饰器
+
+- `tornado.web.asynchronous`(方法装饰器)
+
+    如果一个handler请求方法为异步，使用这个装饰器包裹它。
+
+    这个装饰器用于回调函数风格的异步方式；对于协程来说，应该使用`gen.coroutine`装饰器。
+
+    这个装饰器应该仅用于`HTTP动词方法`；对于其它方法，这个行为都会为未定义状态。这个方法
+    并**不会**让方法异步化，而是告诉框架："这个方法是异步的"。所以这个装饰器应用的方法必须
+    做一些异步的事情。
+
+    如果加入这个装饰器，response不会在方法返回时结束。直到调用`self.finish()`时才会
+    结束请求并返回响应。如果没有这个装饰器，请求会在`get()`,`post()`方法返回时自动结束：
+
+    ```python
+    class MyRequestHandler(RequestHandler):
+        @asynchronous
+        def get(self):
+            http = httpclient.AsyncHTTPClient()
+            http.fetch("http://friendfeed.com/", self._on_download)
+
+        def _on_download(self, response):
+            self.write("Download!")
+            self.finish()
+    ```
+
+- `tornado.web.authenticated`(方法)
+
+    装饰的方法要求用户必须登入。
+
+    如果用户没有登入，将会重定向到setting`login_url`。
+
+    如果你配置的一个login url加上query string，Tornado会假定你是有意这么做的。如果
+    没有加上query string，它会为login url加上`next`参数，让登陆页面成功后将用户带去
+    原来的地方。
+
+- `tornado.web.addslash`(方法)
+
+    使用这个装饰器，为请求的路径增加一个结尾斜杠。
+
+    例如，一个`/foo`的请求将会被重定向到`/foo/`。为了结合这个装饰器，这个handler对应的
+    url正则表达式应该类似于`r'/foo/?`。
+
+- `tornado.web.removeslash`(方法)
+
+    使用这个装饰器，为请求的路径移除一个结尾斜杠。
+
+    例如，一个`/foo/`的请求将会被重定向到`/foo`。为了结合这个装饰器，这个handler对应的
+    url正则表达式应该类似于`r'/foo/*`。
+
+- `tornado.web.stream_request_body`(类装饰器)
+
+    装饰一个`RequestHandler`子类，让它能够支持流式body。
+
+    这个装饰器隐式作出如下改动：
+
+    - `HTTPServerRequest.body`将会为None，body中的参数也不会包括在
+        `RequestHandler.get_argument`中。
+
+    - `RequestHandler.prepare()`在请求的头部被读取后即调用，而不是在整个body读取
+        完之后。
+
+    - 这个子类必须定义一个`data_received(self, data)`；在获取数据后它可能会被调用0次
+        或多次。注意如果这个请求有一个空的body，`data_received`将不会被调用。
+
+    - `prepare`和`data_received`可能返回Futures(比如使用了`@gen.coroutine`协程，
+        在这种情况下，直到这个future运行完之前，下一个方法都不会被调用。
+
+    - 常规的HTTP方法(`post`, `put`等等)可以在整个body被读取后调用。
+
+
+### 其它一切
+
+pass
 
 
 
