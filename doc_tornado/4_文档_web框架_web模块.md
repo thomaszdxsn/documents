@@ -1165,7 +1165,58 @@ class WebDAVHanlder(RequestHandler):
 
     - `get_content_size()`
 
-        pass
+        返回给定路径资源的总大小。
+
+        这个方法可以通过子类重写。
+
+    - `get_modify_time()`
+
+        返回`self.absolute_path`文件的最近修改时间。
+
+        这个方法可以通过子类重写。应该返回一个datetime对象或者None。
+
+    - `get_content_type()`
+
+        返回这个请求的`Content-Type`头部。
+
+    - `set_extra_headers(path)`
+
+        这个方法是用来重写的，为response增加额外的头部。
+
+    - `get_cache_time(path, modified, mime_type)`
+
+        重写这个方法来自定义缓存行为。
+
+        返回一个整数时间，让资源缓存的时间为这个值。或者返回0，让资源的缓存设置为
+        未指定(让浏览器决定)。
+
+        默认的缓存过期时间是10年后。
+
+    - 类方法`make_static_url(settings, path, include_version=True)`
+
+        通过给定的路径构建一个版本化URL。
+
+        这个方法可以通过子类继承后重写。子类自需要实现签名`make_static_url(cls, settings, path)`;
+        其它关键字参数将会传入到`static_url`。
+
+        settings是`Application.settings`字典。
+
+        path是请求的静态文件，应该返回当前host下的相对路径。
+
+        include_version决定生成的URL是否包含query string的参数`v`。
+
+    - `parse_url_path(url_path)`
+
+        将一个静态URL转换为一个文件系统路径。
+
+        这个方法是`make_static_url`的反向实现。
+
+    - 类方法`get_version(settings, path)`
+
+        生成用于静态URL的版本字符串。
+
+
+
 
 
 
