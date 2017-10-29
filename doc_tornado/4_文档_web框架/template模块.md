@@ -1,3 +1,4 @@
+[TOC]
 ## tornado.template -- 生成弹性的输出内容
 
 一个简单的模版系统，把模版编译为Python代码。
