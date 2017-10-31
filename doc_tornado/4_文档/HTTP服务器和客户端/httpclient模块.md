@@ -208,3 +208,28 @@ python -m tornado.httpclient --print_headers --print_body=false http://www.googl
 
 #### (子类)实现
 
+- `tornado.httpclientSimpleAsyncHTTPClient`
+
+    不依赖第三方库的非堵塞HTTP客户端。
+
+    这个类基于`tornado.IOStream`实现了一个HTTP1.1的客户端。`CurlAsyncHTTPClient`支持的一些特性在这个类中并不支持。特别是，这个类不支持代理，连接不可有复用，调用者不可以选择网络接口(networking interface)。
+
+    - `initialize(io_loop, max_clients10, hostname_mapping=None, max_buffer_size=104857600, resolver=None, defaults=None, max_header_size=None, max_body_size=None)`
+
+        创建一个`AsyncHTTPClient`实例。
+
+        每个IOLoop只可以存在一个`AsyncHTTPClient`实例，用来限制待定链接的数量。使用`force_instance=True`可以废止这个行为。
+
+        注意因为这个实例是隐式可复用的，除非使用`force_instance=True`，否则只会使用第一次调用构造器时传入的参数。推荐使用`configure()`方法而不是直接使用构造器，这可以确保参数生效。
+
+        - `max_clients`: 是指可以进行的最大并发数;当达到这个限制时，之后的请求都会在队列中等待。注意，在队列中的时间同样会在`request_timeout`计数。
+
+        - `hostname_mapping`: 是一个映射域名和IP地址的字典。当不能系统级别修改DNS配置时，可以用这个参数来做局部的DNS修改(比如在单元测试中使用)。
+
+        - `max_buffer_size`: (默认100MB)是一次性读入内存中的总byte大小。`max_body_size`(默认等于`max_buffer_size`)是客户端可以接受的最大响应body。如果不设定`streaming_callback`，这两个限制将会生效;如果设置了`streaming_callback`，只有`max_body_size`会生效。
+
+- `tornado.httpclient.CurlAsyncHTTPClient(io_loop, max_clients=10, defaults=None)`
+
+    基于`libcurl`的HTTP客户端。
+
+
