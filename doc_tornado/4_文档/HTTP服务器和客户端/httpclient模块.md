@@ -162,4 +162,49 @@
 
 #### Response对象
 
-pass
+- `tornado.httpclient.HTTPResponse(request, code, headers=None, buffer=None, effective_url=None, error=None, request_time=None, time_info=None, reason=None)`
+
+    HTTP Response对象。
+
+    属性：
+
+    - `request`: HTTPRequest对象。
+    - `code`: 数字HTTP状态码，比如200或者404。
+    - `reason`: 秒数状态码的供人理解的理由短语。
+    - `headers`: `tornado.httputil.HTTPHeaders`对象。
+    - `effective_url`: 资源的最终位置。
+    - `buffer`: response body的`cStringIO`对象。
+    - `body`: byte类型的response body.
+    - `error`: 一个错误对象。
+    - `request_time`: 请求开始到结束所需要的时间(秒)。
+    - `time_info`: 请求的时间诊断信息(字典形式).如果`AsyncHTTPClient`设置了`max_clients`，那么就会加入一个delay延迟。
+    - `rethrow()`: 如果请求中有一个错误，抛出一个`HTTPError`。
+
+
+#### 异常
+
+- 异常`tornado.httpclient.HTTPError(code, message=None, response=None)`
+
+    一个不成功的请求抛出的异常。
+
+    属性：
+
+    - `code`: HTTP错误整数状态码，比如404。如果没有接收到HTTP response，将会使用599状态码，比如timeout。
+    - `response`: `HTTPResponse`对象。
+
+    注意如果`follow_redirects=False`，重定向将会变成一个`HTTPError`，你可以通过`error.response.headers['Location']`来看重定向的终点所在。
+
+#### 命令行接口
+
+这个模块提供了一个简单的命令行接口，使用HTTP客户端来获取一个URL。使用例子：
+
+```python
+# 获取一个URL并打印它的body
+python -m tornado.httpclient http://www.google.com
+
+# 只打印头部
+python -m tornado.httpclient --print_headers --print_body=false http://www.google.com
+```
+
+#### (子类)实现
+
