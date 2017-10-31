@@ -93,4 +93,73 @@
 
     - `fetch(request, callback=None, raise_error=None, **kwargs)`
 
-        pass
+        执行一个请求，异步返回一个`HTTPResponse`.
+
+        `request`参数要么是一个URL字符串，要么是一个`HTTPRequest`对象。如果是一个字符串，我们使用`kwargs`来构造一个`HTTPRequest`。
+
+        这个方法将会返回一个`Future`，它的结果是一个`HTTPResponse`。默认情况下，如果这个请求返回一个非200的响应码这个`Future`将会抛出一个`HTTPError`。另外，如果`raise_erro=False`，那么无论响应码是什么都不会抛出错误而总是返回。
+
+        如果给定一个`callback`，它会使用`HTTPResponse`来调用。在callback接口中，`HTTPError`并不会自动抛出。你需要自己检查response的`.error`属性或者调用它的`rethorw()`方法。
+
+    - 类方法`configure(impl, **kwargs)`
+
+        配置一个`AsyncHTTPClient`子类以供使用。
+
+        `AsyncHTTPClient()`事实上会创建一个子类的实例。这个方法可以通过一个类对象或者一个完全(`python path风格`)的类名来调用(或者传入`None`，来使用默认的`SimpleAsyncHTTPClient`)。
+
+        如果给定了额外的参数，它们将会传入到每个子类的构造器中以供实例的创建使用。关键字参数`max_clients`决定每个IOLoop并行`fetch()`操作的最大数量。其它的参数根据子类实现来决定。
+
+        例子：
+
+        `AsyncHTTPClient.configure("tornado.curl_httpclient.CurlAsyncHTTPClient")`
+
+#### 请求对象
+
+- `tornado.httpclient.HTTPRequest(url, method='GET', headers=None, body=None, auth_usrename=None, auth_password=None, auth_mode=None, connnect_timeout=None, request_timeout=None, if_modified_since=None, follow_redirects=None, max_redirects=None, user_agent=None, user_gzip=None, network_interface=None, stream_callback=None, header_callback=None, prepare_curl_callback=None, proxy_host=None, proxy_port=None, proxy_usrename=None, proxy_password=None, proxy_auth_mode=None, allow_nonstandard_methods=None, validate_cert=None, ca_certs=None, allow_ipv6=None, client_key=None, client_cert=None, body_producer=None, expect_100_continue=None, decompress_response=None, ssl_options=None)`
+
+    HTTP客户端请求(request)对象。
+    
+    除了`url`，其它所有参数都是可选的。
+
+    参数：
+
+    - `url`(字符串): 要获取的URL
+    - `method`(字符串)：HTTP方法，比如“GET”或者“POST”
+    - `headers`(`HTTPHeaders`或者字典): 传入这个请求的额外HTTP头部
+    - `body`: 字符串形式的HTTP请求body(byte或者utf8)
+    - `body_producer`: 惰性或异步的请求body可调用对象(工厂函数)。它通过一个参数调用，一个`write`函数，并且应该返回一个`Future`对象。它应该调用write函数获取新的数据。write函数返回一个Future对象用于控制流。只可以设定`body`和`body_producer`中的一个。`curl_httpclient`不支持使用`body_producer`。当使用`body_producer`时，推荐传入一个`Content-Type`头部。
+    - `auth_username`(字符串)：HTTP验证的用户名
+    - `auth_password`(字符串): HTTP验证的密码
+    - `auth_mode`(字符串): 验证模式；默认为"basic"。`curl_httpclient`支持"basic"和"digest"；`simple_httpclient`支持"basic"。
+    - `connect_timeout`(浮点数)：开始连接后的超时秒数，默认为20秒。
+    - `request_timeout`(浮点数): 整个请求的超时秒数，默认为20秒。
+    - `if_modified_since`(`datetime`或者浮点数): `If-Modified-Since`头部的时间戳的值。
+    - `follow_redirects`(bool)：是否应该自动跟随重定向。默认为True。
+    - `max_redirects`(整数): `follow_redirects`的限制次数，默认为5
+    - `user_agent`(字符串): 这个字符串会发送到`User-Agent`头部。
+    - `decompress_response`(bool): 从服务器请求一个压缩的response，并在下载后将它解压缩。
+    - `user_gzip`(bool): `decompress_response`的一个别称，已经弃用。
+    - `network_interface`(字符串): 请求使用的网络接口。只可以让`curl_httpclient`使用。
+    - `streaming_callback`(可调用对象): 如果设定，`streaming_callback`会在每次接收到的(部分的)数据时都调用，最终response对象的`HTTPResponse.body`和`HTTPResponse.buffer`都将为空。
+    - `header_callback`(可调用对象): 如果设定，`header_callback`会在接受到每行头部时都会被调用(包括第一行，也就是：`HTTP/1.0 200 OK\r\n`, 以及只有`\r\n`的最后一行，所有行都具有换行字符)。`HTTPResponse.headers`在最终的response将会为空。这个参数一般与`streaming_callback`结合使用，因为只有这一个方法可以在请求进行时访问头部数据。
+    - `prepare_curl_callback`(可调用对象): 如果设定，将会调用一个`pycurl.Curl`对象来允许应用进行额外的`setopt`调用。
+    - `proxy_host`(字符串): HTTP代理host。想要使用代理，必须设定`proxy_host`和`proxy_port`；`proxy_username`, `proxy_pass`以及`proxy_auth_mode`是可选的。目前只支持在`curl_httpclient`中使用代理。
+    - `proxy_port`(整数): HTTP代理端口
+    - `proxy_username`(字符串): HTTP代理用户名
+    - `proxy_pass`(字符串): HTTP代理密码
+    - `proxy_auth_mode`(字符串): HTTP代理验证模式；默认为"basic"。支持"basic"和"digest"。
+    - `allow_nonstandard_methods`(bool): 是否允许`method`参数传入非常规值。默认为False。
+    - `validate_cert`(bool): 对于HTTPS请求，是否验证服务器的证书。默认为True。
+    - `ca_certs`(字符串): PEM格式CA证书的文件名，或者传入None来使用默认值。
+    - `client_key`(字符串): 客户端SSL key的文件名。
+    - `client_cert`(字符串): 客户端SSL证书的文件名。
+    - `ssl_options`(`ssl.SSLContext`): 用于`simple_httpclient`的`ssl.SSLContext`对象。覆盖`validate_cert, ca_certs, client_key, client_cert`这些参数.
+    - `allow_ipv6`(bool): 是否在可获取时使用IPv6。默认为True。
+    - `expect_100_continute`(bool): 如果为True，发送头部`Expect: 100-continue`并在发送请求body之前等待一个表示继续的response。只支持在`simple_httpclient`中使用。
+
+    > 注意
+    >> 当使用`curl_httpclient`时，某些可能会继承而获得，因为`pycurl`不允许它们完全重置。包括`ca_certs, client_key, client_certs, network_interface`参数。如果你想使用这些选项，你必须在每个请求中传入它们。
+
+#### Response对象
+
+pass
