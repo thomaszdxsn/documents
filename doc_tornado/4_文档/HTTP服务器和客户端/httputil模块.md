@@ -211,6 +211,167 @@
 
 - `tornado.httputil.HTTPMessageDelegate`
 
-    pass
-        
+    实现这个接口来处理一个HTTP Request或者Response。
+
+    - `headers_received(start_line, headers)`
+
+        在HTTP头部接受并解析后调用这个方法。
+
+        参数：
+
+        - `start_line`: 根据这是一个客户端还是服务器消息来决定传入到这个参数的是一个`RequestStartLine`还是`ResponseStartLine`。
+
+        - `headers`: 一个`HTTPHeaders`实例。
+
+        一些`HTTPConnect`方法只有在`headers_received`运行期间被调用。
+
+        可以返回一个`Future`；如果它在运行那么知道它完成以后都不能读取body。
+
+    - `data_received(chunk)`
+
+        在一部分(chunk)数据被接收后调用这个方法。
+
+        可以返回一个`Future`.
+
+    - `finish()`
+
+        在最后一部分(chunk)被接收后调用。
+
+    - `on_connection_close()`
+
+        在请求被关闭而请求未关闭时调用。
+
+        如果`headers_received()`被调用，那么`finish`或者`on_connection_close`中的一个将会被调用，但两者不会一起调用。
+
+
+- `tornado.utils.HTTPCollection`
+
+    Web APP使用这个这个接口来写它的response。
+
+    - `write_headers(start_line, headers, chunk=None, callback=None)`
+
+        写一个HTTP头部块。
+
+        参数：
+
+        - `start_line`: 一个`RequestStartLine`或者`ResponseStartLine`。
+        - `headers`: 一个`HTTPHeaders`头部。
+        - `chunk`: 首(可选)部分数据。
+        - `callback`: 在写入动作完成后使用的一个callback。
+
+    `start_line`的`version`字段被忽略。
+
+    如果没有给定回调，返回一个`Future`。
+
+    - `write(chunk, callback=None)`
+
+        写一部分(chunk)body数据.
+
+        在写入动作完成后，callback将会被调用。如果没有给定callback，将会返回Future。
+
+    - `finish()`
+
+        指明最后一部分(chunk)数据已经写完。
+
+
+- `tornado.httputil.url_concat(url, args)`
+
+    联结URL和参数，不管URL是否存在query参数。
+
+    `args`可以是一个字典，或者一个键值对元组列表，后者可以允许对一个键存在多个值。
+
+    ```python
+    >>> url_concat("http://example.com/foo", dict(c="d"))
+    'http://example.com/foo?c=d'
+    >>> url_concat("http://example.com/foo?a=b", dict(c="d"))
+    'http://example.com/foo?a=b&c=d'
+    >>> url_concat("http://example.com/foo?a=b", [("c", "d"), ("c", "d2")])
+    'http://example.com/foo?a=b&c=d&c=d2'
+    ```
+
+- `tornado.httputil.HTTPFile`
+
+    代表一个通过`form`上传的文件。
+
+    出于向后兼容的原因，以下属性也可以通过字典键的方式访问：
+
+    - `filename`
+    - `body`
+    - `content_type`
+
+- `tornado.httputil.parse_body_arguments(content_type, body, arguments, files, headers=None)`
+
+    解析一个form的请求内容。
+
+    支持`application/x-www-form-urlencodeed`以及`multipart/form-data`。`content_type`参数需要是一个字符串，`body`需要是一个byte字符串。给定`arguments`和`files`参数都是字典，它们通过被解析的内容来更新。
+
+
+- `tornado.httputil.parse_multipart_form_data(boundary, data, arguments, files)`
+
+    解析一个`multipart/form-data`内容体。
+
+    `boundary`和`data`参数都是byte字符串。给定`arguments`和`files`参数都是字典，它们通过被解析的内容来更新。
+
+- `tornado.httputil.format_timestamp(ts)`
+
+    使用HTTP格式来格式化一个时间戳。
+
+    参数可以是`time.time()`返回的数字时间戳，`time.gmtime()`返回的时间元组，或者一个`datetime.datetime`对象.
+
+    ```python
+    >>> format_timestamp(1359312200)
+    'Sun, 27 Jan 2013 18:43:20 GMT'
+    ```
+
+- `tornado.httputil.RequestStartLine`
+
+    - `__init__(method, path, version)`
+
+        创建一个新的RequestStartLine实例。
+
+        参数：
+
+        - `method`： 字段0的别称
+        - `path`: 字段1的别称
+        - `version`: 字段2的别称
+
+- `tornado.httputil.ResponseStartLine`
+
+    - `__init__(code, reason, version)`
+
+        创建一个新的RequestStartLine实例。
+
+        参数：
+
+        - `code`： 字段0的别称
+        - `reason`: 字段1的别称
+        - `version`: 字段2的别称
+
+- `tornado.httputil.parse_response_start_line(line)`
+
+    对一个HTTP 1.x响应行，返回一个`(version, code, version)`元组。
+
+    对象是一个`collections.namedtuple`.
+
+    ```python
+    >>> parse_response_start_line("HTTP/1.1 200 OK")
+    ResponseStartLine(version='HTTP/1.1', code=200, reason='OK')
+    ```
+
+- `tornado.httputil.split_host_and_port(netloc)`
+
+    根据`netloc`返回一个`(host, port)`元组。
+
+    如果没有port，将会对它赋值为None。
+
+- `tornado.httputil.parse_cookie(cookie)`
+
+    将一个HTTP的`Cookie`头部解析为一个字典，或者一个键值对列表。
+
+    这个函数试图模仿浏览器的cookie解析行为；它没有严格的遵从关于Cookie的RFC规范(因为浏览器也这样)。
+
+    这个解析算法和Django1.9.10使用的一样。
+
+
+
 
