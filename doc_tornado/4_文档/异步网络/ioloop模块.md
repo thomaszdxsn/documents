@@ -189,6 +189,119 @@ if __name__ == '__main__':
 
 - `IOLoop.add_timeout(deadline, callback, *args, **kwargs)`
 
-    pass
+    在I/O循环的`deadline`时运行`callback`.
 
+    返回一个不可见(opaque)的句柄，可以传入到`remove_timeout`来取消。
+
+    `deadline`可以是一个代表事件的数字(和`IOLoop.time`相同规格的单位，一般使用`time.time`)，或者是一个`datetime.timedelta`对象，代表一个相对于当前事件的deadline。在Tornado v4.0以后，使用`call_later`是一个更加方便的替代方案，它默认使用相对时间并且不需传入`timedelta`对象。
+
+    注意，在其它线程中调用`add_timeout`并不安全。你必须使用`add_callback`将控制权转交给`IOLoop`的线程，然后在那里调用`add_timeout`。
+
+    IOLoop的子类必须实现`add_timeout`或者`call_at`中的一个；它们中的每一个默认实现都会在代码中调用另一个方法，但是要是想维护对`Tornado 4.0`以前版本的兼容，那么就必须实现`add_timeout`。
+
+- `IOLoop.call_at(when, callback, *args, **kwargs)`
+
+    在`when`指定的绝对时间运行`callback`。
+
+    `when`必须是一个数字，使用和`IOLoop.time`相同的引用。
+
+    返回一个不可见的句柄，它可以传入到`remove_timeout`来取消。注意，不像`asyncio`中的同名方法，返回的对象并没有`cancel()`方法。
+
+- `IOLoop.call_later(delay, callback, *args, **kwargs)`
+
+    在`delay`秒时间过后调用`callback`。
+
+    返回一个不可见的句柄，它可以传入到`remove_timeout`来取消。注意，不像`asyncio`中的同名方法，返回的对象并没有`cancel()`方法。
+
+- `IOLoop.remove_timeout(timeout)`
+
+    取消一个等待中的timeout对象。
+
+    这个参数是`add_timeout`返回的句柄。即使callback已经于行，这个方法也可以安全的调用。
+
+- `IOLoop.spawn_callback(callback, *args, **kwargs)`
+
+    在下次I/O循环迭代时调用给定的callback。
+
+    不想IOLoop中其它和callback相关的方法一样，`spawn_callback`并不会关联callback和它调用者的`stack_context`，所以适合**运行后就不管(fire-and-forget)**的callback，它不会干扰调用者。
+
+- `IOLoop.time()`
+
+    根据`IOLoop`的时钟返回当前的时间。
+
+    返回的值是一个浮点数，相对于过去的一个不确定时间。
+
+    默认情况下，`IOLoop`的时间函数是`time.time`。但是，也可以通过配置，使用`time.monotonic`来替代它。
+
+- `tornado.ioloop.PeriodicCallback(callback, callback_time, io_loop=None)`
+
+    将给定的callback周期性的调用。
+
+    callback将会在每`callback_time`(单位：毫秒)的间隔调用。注意这个时间单位是毫秒，而Tornado使用的大多数时间相关的函数都是秒。
+
+    如果一个callback的运行时间长于`callback_time`，之后的一次(或多次)调用将会跳过。
+
+    在`PeriodicCallback`创建后，必须调用`start()`。
+
+    - `start()`
+
+        开启计时器。
+
+    - `stop()`
+
+        停止计时器。
+
+    - `is_running()`
+
+        如果`PeriodicCallback`已经开启，返回True。
+
+
+### 调试和错误处理
+
+- `IOLoop.handle_callback_exception(callback)`
+
+    无论何时，IOLoop中的一个callback抛出一个异常时，这个方法都会被调用。
+
+    默认只会简单地把异常记录为一个错误日志。子类可以重写这个方法，来自定义异常的报告。
+
+    异常本身并不会显式传入，但是可以通过`sys.exc_info`获取。
+
+- `IOLoop.set_blocking_signal_threshold(seconds, action)`
+
+    如果`IOLoop`堵塞时间大于`seconds`，发送一个信号。
+
+    传入`seconds=None`来禁用这个设定。
+
+    `action`参数是一个Python信号handler。可以阅读[signal](https://docs.python.org/3.5/library/signal.html#module-signal)模块的文档来获取更多信息。如果`action=None`，如果堵塞过长时间，这个进程将会被杀死。
+
+- `IOLoop.set_blocking_log_threshold(seconds)`
+
+    如果`IOLoop`堵塞时间大于`seconds`，记录栈回溯日志。
+
+    等同于调用`set_blocking_signal_threshold(seconds, self.log_stack)`
+
+- `IOLoop.log_stack(singal, frame)`
+
+    一个信号handler，可以记录当前线程栈回溯的日志。
+
+
+### 用于继承的方法
+
+- `IOLoop.initialize(make_current=None)`
+
+- `IOLoop.close_fd(fd)`
+
+    一个工具方法，用来关闭一个`fd`。
+
+    如果`fd`是一个类文件对象，我们会直接关闭它；否则我们使用`os.close()`。
+
+    这个方法用来支持`IOLoop`继承使用，一般的应用都不需要直接使用它。
+
+- `IOLoop.split_fd(fd)`
+
+    从`fd`参数，返回一个`(fd, obj)`对。
+
+    我们支持原生文件描述符和类文件对象。当一个类文件对象传入时，我们必须保留这个对象，以便于在`IOLoop`关闭时正确的关闭这个对象。
+
+    这个方法用来支持`IOLoop`继承使用，一般的应用都不需要直接使用它。
 
