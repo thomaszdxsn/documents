@@ -193,4 +193,3 @@
 - `tornado.queues.QueueFull`
 
     在队列中满了的时候，调用`Queue.put_nowait()`，将会抛出这个异常。
-
