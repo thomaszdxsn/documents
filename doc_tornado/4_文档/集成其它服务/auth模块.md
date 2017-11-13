@@ -122,7 +122,111 @@ class GoogleOauth2LoginHandler(tornado.web.RequestHandler,
 
 - `tornado.auth.OAuth2Mixin`
 
-    pass
+    OAuth2.0的抽象实现。
+
+    **类属性**：
+
+    - `_OAUTH_AUTHORIZE_URL`: 服务的验证URL
+    - `_OAUTH_ACCESS_TOKEN_URL`: 服务的access token URL
+
+    **方法**:
+
+    - `authorize_redirect(redirect_uri=None, client_id=None, client_secret=None, extra_params=None, callback=None, scope=None, response_type='code')`
+
+        将用户重定向到这个服务的OAuth验证URL。
+
+        如果之前你已在第三方服务中注册了一个callback URI，参数`callback_uri`可以省略。一些服务(包括FriendFeed)，你必须在服务中注册callback URI，而不能用这个方法指定一个callback。
+
+    - `oauth2_request(url, callback, access_token=None, post_args=None, **args)`
+
+        通过OAuth2访问token的授权来获取一个给定的URL。
+
+        如果这个请求是POST，需要提供`post_args`参数。query string参数应该通过关键字参数传入。
+
+        用法：
+
+        ```python
+        class MainHandler(tornado.web.RequestHandler,
+                          tornado.auth.FacebookGraphMixin):
+            @tornado.web.authenticated
+            @tornado.gen.coroutine
+            def get(self):
+                new_entry = yield self.oauth2_request(
+                    "https://graph.facebook.com/me/feed",
+                    post_args={"message": "I am posting from my Tornado application!"},
+                    access_token=self.current_user['access_token']
+                )
+
+                if not new_entry:
+                    # 调用失败，可能是授权过期了？
+                    yield self.authorize_redirect()
+                    return
+                self.finish("Posted a message!")
+        ```
+
+    - `get_auth_http_client()`
+
+        返回一个`AsyncHTTPClient`实例，用于验证用途的请求。
+
+        可以重写，使用一个HTTPClient或者一个CurlAsyncHTTPClient。
+
+
+### Google
+
+- `tornado.auth.GoogleOauth2Mixin`
+
+    使用OAuth2的Google验证。
+
+    为了使用这个Mixin，需要在Google中注册你的应用，然后将相关的参数拷贝到你应用的settings中。
+
+    **步骤**：
+
+    1. 去Google的开发者控制台:[http://console.developers.google.com](http://console.developers.google.com)
+    2. 选择一个项目，或者创建一个新的项目。
+    3. 在左侧的边框中，选择`APIs&Auth`。
+    4. 在API列表中，找到Google+ API，并把它设置为ON。
+    5. 在左侧的边框中，选择`Credentials`。
+    6. 在页面的Oauth部分中，选择`Create New  Client ID`
+    7. 将`Redirect URI`指向你的验证handler。
+    8. 将`Client secret`和`Client ID`拷贝到项目的application settings中。
+
+    **方法**:
+
+    - `get_authenticated_user(redirect_uri, code, callback)`
+
+        处理Google用户的登录，返回一个access token。
+
+        结果是一个包含`access_token`字段(及其它)的字典。不想这个模块中的其它`get_authenticated_user`方法，这个方法不会返回用户的额外信息。可以用返回的access token来使用`Oauth2Mixin.oauth2_request`，来请求额外的信息。
+
+        使用例子：
+
+        ```python
+        class GoogleOauth2LoginHandler(tornado.web.RequestHandler,
+                                       tornado.auth.GoogleOauth2Mixin):
+            @tornado.gen.coroutine
+            def get(self):
+                if self.get_argument("code", False):
+                    access = yield self.get_authenticated_user(
+                        redirect_uri="http://your.site.com/auth/google",
+                        code=self.get_argument("code")
+                    )
+                    # 保存用户的access token
+                else:
+                    yield self.authorize_redirect(
+                        redirect_uri='http://your.site.com/auth/google',
+                        client_id=self.settings['google_auth']['key'],
+                        scope=['profile', 'email'],
+                        response_type='code',
+                        extra_params={"approval_prompt": "auto"}
+                    )
+        ```
+
+### Facebook
+
+- `tornado.auth.FacebookGraphMixin`
+
+    
+    
 
 
 
