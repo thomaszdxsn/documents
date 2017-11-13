@@ -225,8 +225,129 @@ class GoogleOauth2LoginHandler(tornado.web.RequestHandler,
 
 - `tornado.auth.FacebookGraphMixin`
 
-    
-    
+    处理Facebook用户的登录，返回一个user对象。
+
+    用法：
+
+    ```python
+    class FacebookGraphLoginHandler(tornado.web.RequestHandler,
+                                    tornado.auth.FacebookGraphMixin):
+        @tornado.gen.coroutine
+        def get(self):
+            if self.get_argument("code", False):
+                user = yield get_authenticated_user(
+                    redirect_uri='/auth/facebookgraph/',
+                    client_id=self.settings['facebook_api_key'],
+                    client_secret=self.settings['facebook_secret'],
+                    code=self.get_argument("code")
+                )
+                # 保存用户信息
+            else:
+                yield self.authorize_redirect(
+                    redirect_uri='/auth/facebookgraph/',
+                    client_id=self.settings['facebook_api_key'],
+                    extra_params={"scope": "read_stream,offline_access"}
+                )
+    ```
+
+    这个方法返回一个字典，可能包含如下字段：
+
+    - `access_token`: 一个字符串，可以传入到`facebook_request`中使用。
+    - `session_expires`: 一个字符串形式的整数值，代表access token过期的秒数。这个字段应该使用`int()`改变类型；在之后版本的Tornado中，这个字段的值将会从字符串改为整数。
+    - `id, name, first_name, last_name, locale, picture, link`，加上定义在`extra_params`中的字段。
+
+    **方法**：
+
+    - `facebook_request(path, callback, access_token=None, post_args=None, **args)`
+
+        获取给定的**相对**API路径，比如"/btaylor/picture"。
+
+        如果这个请求是一个POST，应该提供`post_args`。query string参数应该以关键字参数形式传入。
+
+        Facebook Graph API的介绍可以在[这里](http://developers.facebook.com/docs/api)查看。
+
+        你可以通过`authorize_redirect()`和`get_authenticated_user()`来获得access token，很多方法都需要这个token。
+
+        例子：
+
+        ```python
+        class MainHandler(tornado.web.RequestHandler,
+                          tornado.auth.FacebookGraphMixin):
+            @tornado.web.authenticated
+            @tornado.gen.coroutine
+            def get(self):
+                new_entry = yield self.facebook_request(
+                    '/me/feed',
+                    post_args={"message": "I am posting from my Tornado application!"},
+                    access_token=self.current_user['access_token']
+                )
+                if not new_entry:
+                    yield self.authorize_redirect()
+                    return 
+                self.finish('Posted a message!')
+        ```
+
+        给定的路径是`self._FACEBOOK_BASE_URL`的相对路径，默认的值为`“https://graph.facebook.com”`.
+
+        这个方法封装了`OAuth2Mixin.oauth2_request`；唯一的区别是这个方法接受相对url，`oauth2_request`接受绝对路径。
+
+
+### Twitter
+
+- `tornado.auth.TwttierMixin`
+
+    Twitter OAuth验证。
+
+    想要使用Twitter来验证用户，需要在[Twitter](http://twitter.com/apps.)中注册你的应用。然后拷贝"Consumer Key"和"Consumer Seceret"到你应用中的settings`twitter_consumer_key`和`twitter_consumer_secret`。
+
+    当你的应用建立好以后，你可以用这个mixin来使用Twitter验证：
+
+    ```python
+    class TwttiterLoginHandler(tornado.web.RequestHandler,
+                               tornado.auth.TwitterMixin):
+        @tornado.gen.coroutine
+        def get(self):
+            if self.get_argument("oauth_token", None):
+                user = yield self.get_authenticated_user()
+                # 保存用户信息
+            else:
+                yield self.authorize_redirect()
+    ```
+
+    `get_authenticated_user()`返回的user对象包含`username, name, access_token`属性。
+
+    **方法**:
+
+    - `authenticate_redirect(callback_uri=None, callback=None)`
+
+        就像`authorize_redirect`一样，但是如果授权后会自动重定向。
+
+        如果你想实现Twitter登录，那么就需要使用这个接口。
+
+    - `twitter_request(path, callback=None, access_token=None, post_args=None, **args)`
+
+        获取给定的API路径，比如`statuses/user_timeline/btaylor`。
+
+        路径中不应该包含API版本数字(我们会自动使用JSON格式以及API版本1)。
+
+        如果这个请求是一个POST，应该提供`post_args`。query string应该以关键字参数形式给定。
+
+        ```python
+        class MainHandler(tornado.web.RequestHandler,
+                          tornado.auth.TwitterMixin):
+            @tornado.web.authenticated
+            @tornado.gen.coroutine
+            def get(self):
+                new_entry = yield self.twitter_request(
+                    "/statuses/update",
+                    post_args={"stauts": "Testing Tornado Web Server"},
+                    access_token=self.current_user['access_token']
+                )
+                if not new_entry:
+                    yield self.authorize_redirect()
+                    return
+                self.finish("Posted a message!")
+        ```
 
 
 
