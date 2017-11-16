@@ -354,4 +354,5 @@ class Router(object):
         """
         self.filters[name] = func
 
+    pass
     
