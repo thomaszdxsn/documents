@@ -268,3 +268,47 @@ class lazy_attribute(object):
         value = self.getter(cls)
         setattr(cls, self.__name__, value)
         return value
+
+
+###############################################################################
+# Exceptions 和 Events ########################################################
+###############################################################################
+
+
+class BottleException(Exception):
+    """ bottle中使用的异常的基类　"""
+    pass
+
+
+###############################################################################
+# 路由 #########################################################################
+###############################################################################
+
+
+class RouteError(BottleException):
+    """ 这是所有和路由相关异常的基类 """
+
+
+class RouteReset(BottleException):      # >> 这个异常并没有将RouteError作为基类 ？？？
+    """ 如果在一个请求handler或者一个插件中抛出这个错误，　这个路由将会重置，所有的插件都会重新应用(re-applied) """
+
+
+class RouteUnkownModeError(RouteError):
+    pass
+
+
+class RouteSyntaxError(RouteError):
+    """　路由解析器发现并不被这个路由支持的东西　"""
+
+
+class RouteBuildError(RouteError):
+    """ 这个路由不能创建 """
+
+
+def _re_flatten(p):
+    """　将一个正则表达式模式串的捕获组转换成非捕获组 """
+    if '(' not in p:
+        return p
+    return re.sub(r'(\\*)(\(\?P<[^>]+>|\((?!\?))', lambda m: m.group(0), if 
+                                                    len(m.group(1)) % 2 else m.group(1) + '(?:', )
+                                                    
