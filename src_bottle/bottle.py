@@ -339,5 +339,19 @@ class Router(object):
         # 如果参数strict为True, 静态路由不会优先检查
         self.strict_order = strict
         self.filters = {
-            pass
+            're': lambda conf: (_re_flatten(conf or self.default_pattern), None, None),
+            'int': labmda conf: (r'-?\d+', int, lambda x: str(int(x))),
+            'float': lambda conf: (r"-?[\d.]+", float, lambda x: str(float(x))),
+            'path': lambda conf: (r".+?", None, None)
         }
+
+    def add_filter(self, name, func):
+        """增加一个过滤器.
+        
+        提供的参数将会通过配置(conf)字符串来调用．
+        必须返回(regexp, to_python, to_url)格式的元组．
+        元组的首个元素是字符串(正则), 后两个必须是可调用对象或者None.
+        """
+        self.filters[name] = func
+
+    
