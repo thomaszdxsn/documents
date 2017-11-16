@@ -164,6 +164,107 @@ else: # Py2的import
     exec(compile('def _raise(*a): raise a[0], a[1], a[2]', '<py3fix>', 'exec'))     # >> 又是_raise()函数，compile()又是什么鬼？
 
 
+# string/byte处理的帮助函数
+# >> 这两个函数有点意思
+def tob(s, enc='utf8'):
+    if isinstance(s, unicode):
+        return s.encode(enc)
+    return bytes("" if s None else s)            
 
 
+def touni(s, enc='utf8', err='strict'):
+    if isinstance(s, bytes):
+        return s.decode(enc, err)
+    return unicode("" if s is None else s)
 
+
+tonat = touni if py3k else tob                  # >> tonat的意思是to_native
+
+# Py3.2修复了cgi.FieldStorage，让它可以接收bytes(这具有重大意义)
+
+# functools.update_wrapper中有一个bug，如果wrapper是一个实例方法，会报错
+def update_wrapper(wrapper, wrapped, *a, **ka):
+    try:
+        functools.update_wrapper(wrapper, wrapped, *a, **kw)
+    except AttributeError:
+        pass
+
+
+# 下面这些帮助函数是模块级别的全局函数，需要预先定义
+# 另外，我懂PEP8, 但是又是使用小写字母的类名也是有意义的
+
+
+# >> 这个函数用于项目bug的修复，让习惯旧式版本用法/接口的人有一个适应过程
+def depr(major, minor, cause, fix):
+    text = "Warning: Use of deprecated feature of API. (Deprecated in Bootle-%d.%d)\n"\
+           "Cause: %s\n"\
+           "Fix: %s\n" %(major, minor, cause, fix)
+    if DEBUG == 'strict':                           # >> 全局常量会在文件末尾定义
+        raise DeprecationWarning(text)
+    warnnings.warn(text, DeprecationWarning, stacklevel=3)
+    return DeprecationWarning(text)
+
+
+def makelist(data):     # (这个函数)只是为了方便
+    if isinstance(data, (tuple, list, set, dict)):
+        return list(data)
+    elif data:
+        return [data]
+    else:
+        return []
+
+
+# >> 这个类似乎是一个描述符，具体用法不明？？？ TODO: 描述符相关需要重新学习
+class DictProperty(object):
+    """一个Property，在局部一个类字典属性中映射一个键"""
+
+    def __init__(self, attr, key=None, read_only=False):
+        self.attr, self.key, self.read_only = attr, key, read_only
+
+    def __call__(self, func):
+        functools.update_wrapper(self, func, updated=[])
+        self.getter, self.key = func, self.key or func.__name__
+        return self
+
+    def get(self, obj, cls):
+        of obj is None: return self
+        key, storage = self.key, getattr(obj, self.attr)
+        if key not in storage: storage[key] = self.getter(obj)
+        return storage[key]
+
+    def __set__(self, obj, value):
+        if self.read_only: raise AttributeError("Read-Only property.")
+        getattr(obj, self.attr)[self.key] = value
+
+    def __delete__(self, obj):
+        if self.read_only: raise AttributeError("Read-Only property.")
+        del getattr(obj, self.attr)[self.key]
+
+
+class cached_property(object):
+    """一个proprty，在每个实例中只会被计算一次，然后把自己替换为一个平常的属性。
+
+    删除这个属性将会重置property.
+    """
+
+    def __init__(self, func):
+        update_wrapper(self, func)
+        self.func = func                        # >> 这是用来计算(处理)最终property的函数
+
+    def __get__(self, obj, cls):
+        if obj is None: return self
+        value = obj.__dict__[self.func.__name__] = self.func(obj)
+        return value
+
+
+class lazy_attribute(object):
+    """一个property, 可以将它本身缓存到一个类对象."""
+
+    def __init__(self, func):
+        functools.update_wrapper(self, func, updated=[])
+        self.getter = func
+
+    def __get__(self, obj, cls):
+        value = self.getter(cls)
+        setattr(cls, self.__name__, value)
+        return value
