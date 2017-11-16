@@ -311,4 +311,33 @@ def _re_flatten(p):
         return p
     return re.sub(r'(\\*)(\(\?P<[^>]+>|\((?!\?))', lambda m: m.group(0), if 
                                                     len(m.group(1)) % 2 else m.group(1) + '(?:', )
-                                                    
+
+
+class Router(object):
+    """ 一个路由器，是一个(route, target)对的有序集合．
+
+    这个路由器的用途是能够高效的将一个WSGI请求和一组route做匹配，并返回首个满足请求的target．
+    target可以是任何东西，通常是一个字符串，ID或者可调用对象．一个Route由一个路径规则(path-rule)和一个HTTP方法组成．
+
+    path-rule可以是静态路径(比如`/contact`)或者包含通配符的动态路径(比如`/wiki/<page>`)．
+    匹配顺序的通配符语法及细节都描述在: `routing`的文档中
+    """
+
+    default_pattern = '[^/]+'
+    default_filter = 're'
+
+    # 当前的CPython正则表达式不允许在一个表达式中超过99个捕获组
+    _MAX_GROUPS_PER_PATTERN = 99
+
+    def __init__(self, strict=False):
+        self.rules = []         # 所有以顺序排列的rules
+        self._groups = {}       # 在动态路由中正则找到(变量)的索引
+        self.builder = {}       # url builder的数据结构
+        self.static = {}        # 静态路由的搜索结构
+        self.dyna_routes = {}
+        self.dyna_regexes = {}  # 动态路由的搜索结构
+        # 如果参数strict为True, 静态路由不会优先检查
+        self.strict_order = strict
+        self.filters = {
+            pass
+        }
