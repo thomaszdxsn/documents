@@ -354,5 +354,32 @@ class Router(object):
         """
         self.filters[name] = func
 
-    pass
+    rule_syntax = re.compile('(\\\\*)'
+                            '(?:(?::([a-zA-Z_][a-zA-Z_0-9]*)?()(?:#(.*?)#)?)'
+                            '|(?:<([a-zA-Z_][a-zA-Z_0-9]*)?(?::([a-zA-Z_]*)'
+                            '(?::((?:\\\\.|[^\\\\>]+)+)?)?)?>))')
     
+    # >> 尴尬，看不懂这个函数是干嘛的？？？
+    def _itertokens(self, rule):
+        offset, prefix = 0, ''
+        for match in self.rule_sytax.finditer(rule):
+            prefix += rule[offset:match.start()]
+            g = match.groups()
+            if g[2] is not None:
+                depr(0, 13, "Use of old route syntax.",
+                    "User <name> instead of :name in routes.")
+            if len(g[0]) % 2:
+                prefix += match.group(0)[len(g[0]):]
+                offset = match.end()
+                continue
+            if prefix:
+                yield prefix, None, None
+            name, filtr, conf = g[4:7] if g[2] is None else g[1:4]
+            yield name, filtr or 'default', conf or None
+            offset, prefix = match.end(), ''
+        if offset <= len(rule) or prefix:
+            yield prefix + rule[offset:], None, None
+    
+    def add(self, rule, method, target, name=None):
+        """ 增加一个新的rule，或者为现存的rule替换target """
+        
