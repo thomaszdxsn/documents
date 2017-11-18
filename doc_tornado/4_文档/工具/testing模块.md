@@ -170,5 +170,82 @@
 
 ### 控制输出日志
 
-pass
+- `tornado.testing.ExPectLog(logger, regex, required=True)`
+
+    上下文管理器，用来捕获和阻止意料中的日志输出。
+
+    想让测试的错误条件少罗嗦点就很有用，这个方法仍然会让未意料的日志实体可见。另外这个方法不是线程安全的。
+
+    如果日志中有任何stack回溯信息，需要把`logged_stack`设置为True。
+
+    用法：
+
+    ```python
+    with ExpectLog("tornado.application", "Uncaught expection"):
+        error_response = self.fetch('/some_page")
+    ```
+
+    参数：
+
+    - `logger`: 想要观察的纪录器(logger)对象(或者记录器的名称)。如果传入空字符串，将会观察根logger。
+
+    - `regex`: 想要观察的正则表达式。任何匹配这个正则表达式的logger实体都会被阻止。
+
+    - `required`: 如果为True，如果with代码块结束还没有阻止任何日志，则抛出一个异常。
+
+
+- `tornado.testing.LogTrapTestCase(methodName='runTest')`
+
+    如果测试通过，捕获并丢弃所有日志输出的一个test-case。
+
+    一些库即使测试通过仍然会输出一大堆日志，所以这个类可以最小化输出的啰嗦程度。只需简单地继承这个类，也可以将它组合`AsyncTestCase`来多重继承。
+
+    这个类假定只配置了一个log handler，即`StreamHandler`。并不兼容于其它日志缓冲机制。
+
+
+### Test Runner
+
+- `tornado.testing.main(**kwargs)`
+
+    一个简单的测试runner。
+
+    这个test runner本质上等同于标准库的`unittest.main`，但是支持一些额外的tornado风格option解析及日志格式。但是在使用类似`AsyncTestCase`时并不一定要使用这个`main()`函数；这些test-case是自满足的，可以用于任何test-runner。
+
+    最简单地运行一个test的方式即通过命令行：
+
+    `python -m tornado.testing tornado.test.stack_context_test`
+
+    一个包含众多测试的项目，可能需要定义一个脚本，比如`tornado/test/runtests.py`。这个脚本需要定义一个方法`all()`,它会定义一个`test-suite`，然后调用`main()`。注意即使定义了这个test脚本，仍然可以通过命令行来运行单个测试：
+
+    ```python
+    # 运行所有的测试
+    python -m tornado.test.runtests
+
+    # 运行单个测试
+    python -m tornado.test.runtests tornado.test.stack_context_test
+    ```
+
+### 助手函数
+
+- `tornado.testing.bind_unused_port(reuse_port=False)`
+
+    将本机一个可获取的port和一个server socket绑定。
+
+    返回一个元组(socket, port)
+
+- `tornado.testing.get_unused_port()`
+
+    返回一个(但愿)未使用的port。
+
+    这个函数并不保证返回的端口是可用的。
+
+- `tornado.testing.get_async_test_timeout()`
+
+    获取异步测试的全局timeout设置。
+
+    返回一个浮点数，即超时的秒数。
+
+
+
+
     
