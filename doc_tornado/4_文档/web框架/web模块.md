@@ -1,3 +1,5 @@
+[TOC]
+
 ## tornado.web -- RequestHandler以及Application类
 
 `tornado.web`提供了一个简单的web框架以及异步特性允许大规模的连接开启，灵感来自与长轮询(long polling)。
@@ -813,7 +815,405 @@ class WebDAVHanlder(RequestHandler):
 
     参数：
 
-    - `pattern`: pass
+    - `pattern`: 用来匹配的正则表达式。任何的捕获组都会传入handler的`get/post/etc`
+        HTTP方法中。命名捕获组以关键字参数形式传入，非命名捕获组以位置参数形式传入。
+
+    - `handler`: 想要调用的`RequestHandler`子类。
+
+    - `kwargs`(可选): 传入handler构造器的额外参数字典。
+
+    - `name`(可选): 这个handler的名称。供`reverse_url`使用。
+
+    这个类同样可以在`tornado.web.url`模块下面获取。
+
+
+### 装饰器
+
+- `tornado.web.asynchronous`(方法装饰器)
+
+    如果一个handler请求方法为异步，使用这个装饰器包裹它。
+
+    这个装饰器用于回调函数风格的异步方式；对于协程来说，应该使用`gen.coroutine`装饰器。
+
+    这个装饰器应该仅用于`HTTP动词方法`；对于其它方法，这个行为都会为未定义状态。这个方法
+    并**不会**让方法异步化，而是告诉框架："这个方法是异步的"。所以这个装饰器应用的方法必须
+    做一些异步的事情。
+
+    如果加入这个装饰器，response不会在方法返回时结束。直到调用`self.finish()`时才会
+    结束请求并返回响应。如果没有这个装饰器，请求会在`get()`,`post()`方法返回时自动结束：
+
+    ```python
+    class MyRequestHandler(RequestHandler):
+        @asynchronous
+        def get(self):
+            http = httpclient.AsyncHTTPClient()
+            http.fetch("http://friendfeed.com/", self._on_download)
+
+        def _on_download(self, response):
+            self.write("Download!")
+            self.finish()
+    ```
+
+- `tornado.web.authenticated`(方法)
+
+    装饰的方法要求用户必须登入。
+
+    如果用户没有登入，将会重定向到setting`login_url`。
+
+    如果你配置的一个login url加上query string，Tornado会假定你是有意这么做的。如果
+    没有加上query string，它会为login url加上`next`参数，让登陆页面成功后将用户带去
+    原来的地方。
+
+- `tornado.web.addslash`(方法)
+
+    使用这个装饰器，为请求的路径增加一个结尾斜杠。
+
+    例如，一个`/foo`的请求将会被重定向到`/foo/`。为了结合这个装饰器，这个handler对应的
+    url正则表达式应该类似于`r'/foo/?`。
+
+- `tornado.web.removeslash`(方法)
+
+    使用这个装饰器，为请求的路径移除一个结尾斜杠。
+
+    例如，一个`/foo/`的请求将会被重定向到`/foo`。为了结合这个装饰器，这个handler对应的
+    url正则表达式应该类似于`r'/foo/*`。
+
+- `tornado.web.stream_request_body`(类装饰器)
+
+    装饰一个`RequestHandler`子类，让它能够支持流式body。
+
+    这个装饰器隐式作出如下改动：
+
+    - `HTTPServerRequest.body`将会为None，body中的参数也不会包括在
+        `RequestHandler.get_argument`中。
+
+    - `RequestHandler.prepare()`在请求的头部被读取后即调用，而不是在整个body读取
+        完之后。
+
+    - 这个子类必须定义一个`data_received(self, data)`；在获取数据后它可能会被调用0次
+        或多次。注意如果这个请求有一个空的body，`data_received`将不会被调用。
+
+    - `prepare`和`data_received`可能返回Futures(比如使用了`@gen.coroutine`协程，
+        在这种情况下，直到这个future运行完之前，下一个方法都不会被调用。
+
+    - 常规的HTTP方法(`post`, `put`等等)可以在整个body被读取后调用。
+
+
+### 其它一切
+
+- 异常`tornado.web.HTTPError(status_code=500, log_message=None, *args, **kwargs)`
+
+    一个转向HTTP错误响应的异常。
+
+    抛出一个`HTTPError`有时相比调用`RequestHandler.send_error`会更加方便，因为
+    它会自动终结当前的函数。
+
+    想要自定义HTTPError发送的响应，应该重写`RequestHandler.send_error`。
+
+    参数：
+
+    - `status_code`(整数): HTTP状态码。除非给定了关键字参数`reason`，否则必须使用
+        `httplib.responses`清单中的状态码。
+
+    - `log_mesage`(字符串): 这个错误写入到日志中的消息(如果不是DEBUG模式，这个消息
+        不会展示给用户观看)。可以使用`%s`形式占位符，它们将会以剩下的位置参数来填充。
+
+    - `reason`(字符串): **仅**关键字参数。HTTP协议中和`status_code`共处于一列的
+        "reason"短语。通常由`status_code`自动决定，但是如果使用非标准状态码则可以使用
+        这个参数。
+
+- 异常`tornado.web.Finish`
+
+    一个结束请求而不生成错误响应的异常。
+
+    如果在一个`RequestHandler`中抛出一个`Finish`，这个请求将会被结束(如果还没有调用
+    `self.finish()`的话，调用它)，但是错误处理方法(包括`RequestHandler.send_error`)
+    将不会被调用。
+
+    如果无参数调用`Finish()`，待定的response将会被发送。如果给定`Finish()`参数，
+    这个参数将会发送给`RequestHandler.finish()`。
+
+    相比重写`write_error()`方法，这个异常可以更方便的实现自定义错误页面(尤其在库代码中)：
+
+    ```python
+    if self.current_user is None:
+        self.set_status(403)
+        self.set_header("WWW-Authenticate", "Basic realm='something'")
+        raise Finish()
+    ```
+
+- 异常`tornado.web.MissingArgumentError(arg_name)`
+
+    `RequestHandler.get_argument()`抛出的异常。
+
+    这是`HTTPError`的子类，所以它能够抛出400响应码而不是500响应码。
+
+- 类`tornado.web.UIModule(handler)`
+
+    在一个页面中可重用的，模块化的UI单元。
+
+    UI模块通常执行额外的查询，可以包含额外的CSS和Javascript，这些代码将会自动插入到
+    渲染的页面中。
+
+    UIModule的子类必须重写`render`方法。
+
+    - `render(*args, **kwargs)`
+
+        子类中重写，返回这个模块的输出。
+
+    - `embeded_javascript()`
+
+        重写来返回嵌入到这个页面中的JavaScript字符串。
+
+    - `javascript_files()`
+
+        重写来返回这个模块需要的JavaScript文件列表。
+
+        如果返回的值是相对路径，它们将使用`RequestHandler.static_url()`来转义。
+
+    - `embedded_css()`
+
+        重写来返回嵌入到这个页面中的CSS字符串。
+
+    - `css_files()`
+
+        重写来返回这个模块需要的CSS文件列表。
+
+        如果返回的值是相对路径，它们将使用`RequestHandler.static_url()`来转义。
+
+    - `html_head()`
+
+        重写来返回放置于`<head/>`元素之前的字符串。
+
+    - `html_body()`
+
+        重写来返回放置于`<body/>`元素之前的字符串。
+
+    - `render_string()`
+
+        重写一个模版，并将它以字符串返回。
+
+
+- 类`tornado.web.ErrorHandler(application, request, **kwargs)`
+
+    对所有请求生成一个带`status_code`的错误响应。
+
+- 类`tornado.web.FallbackHandler(application, request, **kwargs)`
+
+    一个包裹其它HTTP服务器回调的`RequestHandler`。
+
+    它接受的fallback关键字参数必须是可调用对象，并且可以接受一个`HTTPServerRequest`，以及一个
+    `Application`或者`tornado.wagi.WAGIContainer`。这个类最有用的情况是在一个
+    服务器同时使用Tornado的`RequestHandlers`和WSGI。典型用法：
+
+    ```python
+    wsgi_app = tornado.wsgi.WSGIContainer(
+        django.core.handlers.wsgi.WSGIHandler()
+    )
+
+    application = tornado.web.Application([
+        (r"/foo", FooHandler),
+        (r".*", FallbackHandler, dict(fallback=wsgi_app)),
+    ])
+    ```
+
+- 类`tornado.web.RedirectHandler(application, request, **kwargs)`
+
+    将所有的GET请求重定向到给定的URL。
+
+    你需要对这个handler提供一个关键字参数参数`url`:
+
+    ```python
+    application = tornado.web.Application([
+        (r"/oldpath", tornado.web.RedirectHandler, {"url": "/newpath"}),
+    ])
+    ```
+
+    `RedirectHandler`支持正则表达式替换：
+
+    ```python
+    application = tornado.web.Application([
+        (r"/(.*?)/(.*?)/(.*)", tornado.web.RedirectHandler, {"url": "/{1}/{0}/{2}"}),
+    ])
+    ```
+
+    最后的URL将会以`str.format()`方法来格式化。在上面的例子中，针对`/a/b/c`URL的请求
+    将会格式化为：
+
+    ```python
+    str.format("/{1}/{0}/{2}", "a", "b", "c") # -> "/b/a/c"
+    ```
+
+- 类`tornado.web.StaticFileHandler(application, request, **kwargs)`
+
+    一个简单的handler，可以针对一个文件夹伺服静态内容。
+
+    如果你设置了setting`static_path`，那么就会自动配置一个`StaticFileHandler`。
+    这个handler可以通过settings`static_url_prefix`, `static_handler_class`,
+    `static_handler_args`来自定义。
+
+    想要为静态文件夹的映射URL加入额外路径，可以这样：
+
+    ```python
+    application = tornado.web.Application([
+        (r"/content/(.*)", web.StaticFileHandler, {"path": "/var/www"}),
+    ])
+    ```
+
+    这个handler构造器要求必须传入一个`path`参数，它会指定要伺服的本地根目录。
+
+    注意正则中的捕获组是必须的，它解析的值将会以`path`参数传入到`get()`方法中(注意和
+    构造器中的同名参数不一样)。
+
+    想要在请求一个目录时自动伺服一个类似`index.html`的文件，为你的setting添加
+    `static_handler_args=dict(default_filename='index.html')`或者
+    为你自己的`StaticFileHandler`添加一个初始化参数`default_filename`。
+
+    想要最大化浏览器缓存的性能，这个类支持版本URL(默认使用参数`?v=`)。如果给定一个版本，
+    我们发出指令让浏览器无期限缓存这个文件。`make_static_url`(也可以在
+    `RequeHandler.static_url`中获取)可以用来构造一个版本URL。
+
+    这个handler主要用于开发用途和轻量级的文件伺服；对于高流量的情况下，为了更好的性能最好
+    使用专门的静态文件伺服(比如nginx或Apache）。我们支持HTTP的`Accept-Ranges`机制
+    来返回部分内容（因为浏览器需要这个功能来实现HTML5的video和audio浏览）。
+
+    **继承的注意事项**
+
+    这个类设计通过继承来扩展，但是因为静态URL是通过类方法而不是实例方法来生成的，这个类的
+    继承模式稍微有些不同。在重写一个类方法时确保使用装饰器`@classmethod`。实例方法可能
+    会用到这些属性：`self.path`, `self.absolute_path`, `self.modified`。
+
+    子类应该只重写这章节讨论的方法；重写其它的方法会容易导致错误。重写`StaticFileHandler.get`
+    是尤其容易出问题的，因为它和`compute_etag`和其它方法紧密耦合。
+
+    想要改变静态url的生成方式(比如想匹配其它服务器或者CDN)，请重写:
+
+    - `make_static_url`
+
+    - `parse_url_path`
+
+    - `get_cache_time`
+
+    - `get_version`
+
+    想要替换文件系统的交互方式(比如伺服数据库的内容），请重写：
+
+    - `get_content`
+
+    - `get_conetent_size`
+
+    - `get_modifed_time`
+
+    - `get_absolute_path`
+
+    - `validate_absolute_path`
+
+    方法介绍：
+
+    - `compute_etag()`
+
+        根据静态URL的版本来设置Etag头部。
+
+        这将会允许针对缓存版本高效的`If-None-Match`检查，对一部分response发送正确的
+        `Etag`。
+
+    - `set_headers()`
+
+        对response设置内容和缓存头部。
+
+    - `should_return_304()`
+
+        如果头部应该返回状态码304，这个方法返回True。
+
+    - 类方法`get_absolute_path(root, path)`
+
+        返回path针对root的绝对路径。
+
+        `root`是这个`StaticFileHandler`配置的path(多数情况是setting`static_path`)。
+
+        这个类方法可以在子类中重写。默认会返回一个文件系统路径，但是可以通过
+        重写`get_content`来理解这个字符串。
+
+    - `validate_absolute_path(root, absolute_path)`
+
+        验证和返回绝对路径。
+
+        `root`是这个`StaticFileHandler`配置的path，`path`是`get_absolute_path()`
+        返回的结果。
+
+        这是一个实例方法，在请求处理阶段被调用，所以它可能会抛出`HTTPError`错误或者
+        使用`RequestHandler.redirect()`方法。如果静态文件不存在，就会返回404错误。
+
+        这个方法可能在返回路径之前修改它，但是注意这个修改不会被`make_static_url`理解。
+
+        在实例方法中，这个方法的结果可以通过`self.absolute_path`获取。
+
+    - 类方法`get_content(abspath, start=None, end=None)`
+
+        通过给定的绝对路径取回请求的静态资源内容。
+
+        这个类方法可以在子类中重写。注意它的参数签名和其它类方法不一样(没有`settings`参数)。
+
+        这个方法应该返回一个byte字符串或者一个byte字符串的迭代器。后者对大型文件适用并且
+        会大幅减少内存碎片。
+
+    - 类方法`get_content_version(abspath)`
+
+        通过给定的路径返回这个资源的版本字符串。
+
+        这个类方法可以在子类中重写。默认的实现是返回文件内容的hash。
+
+    - `get_content_size()`
+
+        返回给定路径资源的总大小。
+
+        这个方法可以通过子类重写。
+
+    - `get_modify_time()`
+
+        返回`self.absolute_path`文件的最近修改时间。
+
+        这个方法可以通过子类重写。应该返回一个datetime对象或者None。
+
+    - `get_content_type()`
+
+        返回这个请求的`Content-Type`头部。
+
+    - `set_extra_headers(path)`
+
+        这个方法是用来重写的，为response增加额外的头部。
+
+    - `get_cache_time(path, modified, mime_type)`
+
+        重写这个方法来自定义缓存行为。
+
+        返回一个整数时间，让资源缓存的时间为这个值。或者返回0，让资源的缓存设置为
+        未指定(让浏览器决定)。
+
+        默认的缓存过期时间是10年后。
+
+    - 类方法`make_static_url(settings, path, include_version=True)`
+
+        通过给定的路径构建一个版本化URL。
+
+        这个方法可以通过子类继承后重写。子类自需要实现签名`make_static_url(cls, settings, path)`;
+        其它关键字参数将会传入到`static_url`。
+
+        settings是`Application.settings`字典。
+
+        path是请求的静态文件，应该返回当前host下的相对路径。
+
+        include_version决定生成的URL是否包含query string的参数`v`。
+
+    - `parse_url_path(url_path)`
+
+        将一个静态URL转换为一个文件系统路径。
+
+        这个方法是`make_static_url`的反向实现。
+
+    - 类方法`get_version(settings, path)`
+
+        生成用于静态URL的版本字符串。
 
 
 
