@@ -110,4 +110,21 @@ web request         starts                  # 或者显示创建一个local Sess
 
 ### 使用自定义创建的Scope
 
+`scope_session`对象默认的"thread local"只是`Session`的众多scope中的一个。可以创建自定义的scope.
+
+假定一个Web框架定义了一个库函数`get_current_request()`。使用这个框架的应用可以任意调用这个函数，返回的结果是当前的Request对象。如果`Request`对象是可hash的，那么这个函数可以轻松的集成`scope_session`：
+
+```python
+from my_web_framework import get_current_request, on_request_end
+from sqlalchemy.orm import scoped_session, sessionmaker
+
+Session = scoped_session(sessionmaker(bind=some_engine), scopefunc=get_current_request)
+
+@on_request_end
+def remove_session(req):
+    Session.remove()
+```
+
+### 上下文Session API
+
 pass
