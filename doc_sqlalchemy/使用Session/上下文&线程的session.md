@@ -177,5 +177,51 @@ def remove_session(req):
 
     - `remove()`
 
-        pass
+        如果存在，丢弃当前的Session。
+
+        首先将会调用当前Session的`Session.close()`方法，它将会首先释放当前事务/连接持有的资源；事务出现异常则回滚。然后Session将会被丢弃。如果下次使用这个scope，这个`scoped_session`将会生成一个新的Session对象。
+
+    - `session_factory = None`
+
+        `__init__`提供的session_factory将会存储在这个属性中，可以在之后的某个时间访问它。如果需要新的非scope-Session或者Connection时，这个属性会很有用。
+
+
+- `sqlalchemy.util.ScopedRegistry(createfunc, scopefunc)`
+
+    一个registry, 可以存储一个或多个基于“scope”函数类的实例。
+
+    这个对象实现了`__call__`作为"getter",所以调用`myregistey()`将会把包含的对象返回给当前的scope。
+
+    参数：
+
+    - `createfunc`: 一个可调用对象，将会返回一个新的对象置入到当前的registry。
+    - `scopefunc`: 一个可调用对象，返回一个键(hashable)用来存储/取回以一个对象。
+    
+    - `__init__(createfunc, scopefunc)`
+
+        构建一个新的`ScopedRegistry`
+
+        参数:
+
+        - `createfunc`: 一个创建函数，如果不存在，将会为当前scope生成一个新的值。
+        - `scopefunc`: 一个函数，返回一个代表当前scope的hashable token(比如，当前线程的标识符).
+
+    - `clear()`
+
+        如果存在，清除当前scope。
+
+    - `has()`
+
+        如果当前scope存在任何对象，返回True。
+
+    - `set(obj)`
+
+        设置当前scope的值。
+
+- `sqlalchemy.util.ThreadLocalRegistry(creatfunc)`
+
+    基类: `sqlalchemy.util._collections.ScopedRegistry`
+
+    一个`ScopedRegistry`，它使用`threading.local()`来进行存储.
+
 
