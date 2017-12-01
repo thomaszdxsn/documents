@@ -127,4 +127,55 @@ def remove_session(req):
 
 ### 上下文Session API
 
-pass
+- `sqlalchemy.orm.scoping.scoped_session(session_factory, scopefunc=None)`
+
+    提供域管理的Session对象.
+
+    - `__call__(**kw)`
+
+        返回当前的`Session`,如果当前没有则通过`scoped_session.session_factory`来制造一个.
+
+        参数:
+
+        - `**kw`: 如果当前没有存在Session对象，则传入`scoped_session.session_factory`的关键字参数。如果Session已经存在但仍然传入关键字参数，将会抛出`InvalidRequestError`。
+
+    - `__init__(session_factory, scopefunc=None)`
+
+        创建一个新的`scoped_session`。
+
+        参数:
+
+        - `session_factory`: 一个创建新Session实例的工厂。通常(但不是必须)传入一个sessionmaker实例.
+        - `scopefunc`: 可选参数，用来定义当前的域。如果没有传入这个参数，`scoped_session`对象被假定为"thread-local"域，将会使用Python的`threading.local()`来保持当前的Session。如果传入，这个函数应该返回一个hashable token；这个token将会作为一个字典的键，用来存储和取回当前的Session。
+
+    - `Configure(**kwargs)`
+
+        重新配置这个`scoped_session`使用的`sessionmaker`。
+
+    - `query_property(query_cls=None)`
+
+        *这个方法类似Django的model manager功能*
+
+        返回一个类property，将会在当前Session被调用后生成当前这个类的一个`Query`。
+
+        例如:
+
+        ```python
+        Session = scoped_session(sessionmaker())
+        
+        
+        class MyClass(object):
+            query = Session.query_property()
+        
+        # 然后可以这样使用
+        result = MyClass.query.filter(MyClass.name == 'foo').all()
+        ```
+        
+        默认会生成这个配置了session类的实例。想要覆盖并使用一个自定义实现，需要传入一个`query_cls`可调用对象.这个可调用对象将会以类mapper作为第一个位置参数，以session作为关键字参数来调用.即实现一个类似`query_cls(mapper, session=None)`的可调用对象.
+
+        在一个类中没有限制可以使用多少个query properties(元类).
+
+    - `remove()`
+
+        pass
+
