@@ -330,3 +330,70 @@ model是核心组件，它代表knowledge, 它包含／管理（业务）逻辑�
 
 - `PyQt`,QT工具包的Python接口.其中有一个`QAction`类，使用了命令模式.
 - `git-cola`,Python编写的一个Git GUI.
+
+
+### 12.解释器模式(interpreter)
+
+*解释器模式只对应用中的高级用户有用，因为这个模式的背后思想是给非新手用户使用一个简单的语言来达到它们的想法*
+
+对于应用来说，一般有两种类型的用户:
+
+- 基础用户: 这类用户不原因花太多时间去学习应用的内部或者花时间去搞一些繁杂的配置．基本的使用对它们来说已经足够了.
+- 高级用户: 这类用户通常属于少数，它们不介意花时间去学习应用的高级特性，它们甚至愿意为此学习一个配置(脚本)语言，应该:
+    - 让他们能够对应用有更好的控制能力
+    - 让他们用更好的方式完成自己的想法
+    - 让他们的生产能力更高
+
+通常"简单的语言"是指**DSL(Domain Specific Language)**.
+
+DSL的性能通常不是需要担心的.DSL的重点应该放在提供一个负责特定功能的迷你语言，并且为这个迷你语言提供易读的语法.
+
+这章介绍了一个Python(3.0+)标准库`Pyparsing`，使用这个库可以轻松的定义一套自己的DSL.
+
+应用实例:
+
+- `PyT`是一个Python的DSL，用于生成(X)HTML.一般拿来和Jinja2相比.因为它是一个DSL，所以当然使用的也是解释器模式.
+- `Chromium`是一个受chrome影响创建的开源软件(FOSS)浏览器,它的内部使用解释器模式把C模型参数转译为Python对象并执行相关的命令.
+
+
+### 13.观察者模式(observer)
+
+*想象一下在MVC架构里面我们想要一个model对应两个view,只要model发生变动，那么view也会自动更新．这就是观察者模式, 也叫做发布－订阅模型*
+
+观察者者模式背后的理论和MVC一样，都是关于软件工程的**分离关注点(seperation of concern)**, 在观察者模式中也就是增加＂发布者＂和＂订阅者＂之间的解藕程度，让订阅者可以在任何时候加入/移除对某个发布者的关注.另外，发布者也不需要在意谁在观察自己,它只需要通知它所有的关注者就可以了.
+
+应用实例:
+
+- `django-observer`是一个Django第三方包．可以用来注册一个回调函数，在一些Django字段发生变动时自动调用这个函数.
+- `RabbitMQ`是一个erlang开源库.可以用它来为应用加入异步消息队列系统.RabbitMQ可以被Python应用使用，用来实现发布－订阅模型.
+
+参考:
+
+- [http://code.activestate.com/recipes/131499-observer-pattern/](http://code.activestate.com/recipes/131499-observer-pattern/)
+
+
+### 14.状态模式(state)
+
+*状态模式说到底不过是一个应用于特定软件工程问题的有限状态机*
+
+*状态设计模式允许为一个上下文封装无限数量的状态,目的是易于维护和扩展*
+
+用来作状态过渡的工作的一个常见工具即**有限状态机会(finite-state machine)**.有限状态机是一个抽象的机器，它具有两个关键的组件:状态(state)和过渡(transision).状态(state)即系统当前(激活)的状态(status).过渡即从一个状态改为另一个.通常在一个过渡出现之前，会先执行一堆动作.
+
+需要记住的就是有限状态机在一个时间里面只能存在一个激活的状态．
+
+良好的运用有限状态机(比如`state_machine`)可以改善条件逻辑代码,就是说不需要再写那些愚蠢的`if-else`语句.
+
+应用实例:
+
+- `django-fsm`是一个Django的第三方包，这个包为Django框架简化了有限状态机的实现．
+- `State Machine Compiler(SMC)`, 使用它的DSL可以为你自动生成有限状态机的代码.
+
+参考:
+
+- [http://ginstrom.com/scribbles/2007/10/08/design-patterns-python-style/](http://ginstrom.com/scribbles/2007/10/08/design-patterns-python-style/)
+
+
+### 15.策略模式(strategy)
+
+pass
