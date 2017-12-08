@@ -409,5 +409,16 @@ Python的`list.sort()`和`sorted()`都是策略模式的例子.它们都接受�
 - [http://en.wikipedia.org/wiki/Strategy_pattern](http://en.wikipedia.org/wiki/Strategy_pattern)
 
 
+### 16.模板模式(template)
 
+*好代码的一个关键要素就是避免多余，模板模式就是用来消除多余代码的*
 
+应用实例: 
+
+- `cmd`是Python的一个标准模块，用来作为内置命令行解释器.
+- `asyncore`用于实现异步的socket C/S服务．
+- `cowpy`一个有趣的格式化输出库
+
+参考:
+
+- [http://ginstrom.com/scribbles/2007/10/08/design-patterns-python-style/](http://ginstrom.com/scribbles/2007/10/08/design-patterns-python-style/)
