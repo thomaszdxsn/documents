@@ -1,8 +1,11 @@
 ﻿[TOC]
 
 书名: mastering python design pattern
+
 出版社: packt
+
 作者: Sakis Kasampalis
+
 作者简介: 作者是一名荷兰的工程师，自称是一名实用主义编程语言/工具的忠实信徒．他的格言"是正确的工具应该用在正确的地方"．他最爱的语言是Python因为它发现这个语言的生产能力很强.
 书籍简介: 本书共16个章节，分别对应16个设计模式．在书里大量使用论文式reference，可以看出作者是一个有着丰富经验，大量阅读的工程师．每一章节中，作者都会从上到下，从模式的定义到具体实例／使用场景来讲解，章节的末尾再次进行归纳．通俗易懂，阅读体验极佳．推荐配合万星github仓库[python-patterns](https://github.com/faif/python-patterns)一起食用，风味更佳． 
 
