@@ -396,4 +396,18 @@ DSL的性能通常不是需要担心的.DSL的重点应该放在提供一个负�
 
 ### 15.策略模式(strategy)
 
-pass
+*策略模式让一个问题的解决方案可选多种算法(中的一个),这是一个杀手级特性，可以让运行时的程序转变使用的代码.*
+
+Python的`list.sort()`和`sorted()`都是策略模式的例子.它们都接受一个`key`参数,这个参数就是实现排序策略的名称.
+
+参考：
+
+- [http://stackoverflow.com/questions/963965/how-is-this-strategy-pattern
+](http://stackoverflow.com/questions/963965/how-is-this-strategy-pattern
+)
+
+- [http://en.wikipedia.org/wiki/Strategy_pattern](http://en.wikipedia.org/wiki/Strategy_pattern)
+
+
+
+
