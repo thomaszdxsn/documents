@@ -94,4 +94,124 @@ proxy函数通过操作底层的属性或者集合来响应操作，对proxy的�
 
 ## 新值的创建
 
+当一个`list.append()`事件(或者`set.add()`, `dict.__setitem__()`，抑或标量赋值事件)被association proxy拦截后，将会使用“中间“对象的构造器来实例化一个新的实例，将会把给定的值作为单个参数传入到构造器中。
+
+在我们上面的例子中，一个类似于下面的操作：
+
+`user.keywords.append('cheese inspector')`
+
+将会在association proxy的操作中被转译为：
+
+`user.kw.append(Keyword('cheese inspector'))`
+
+这个例子可以成功是因为我们设计了`Keyword`的构造器只接受一个位置参数:`keyword`.在一些情况下不能使用单参数的构造器，association proxy可以使用`creator`参数来自定义对象创建行为，这个参数接收一个可调用对象(比如：Python函数),然后返回生成的对象：
+
+```python
+class User(Base):
+    # ...
+
+    # 对append()事件使用Keyword(keyword=kw)
+    keywords = association_proxy('kw', 'keyword',
+                        creator=lambda kw: Keyword(keyword=kw))
+```
+
+`creator`函数在list或set的情况接收单个参数.在dict的情况它接收两个参数: `key`和`value`.
+
+### 简化关联对象
+
+“association object“模式是多对多关系的一个扩展，具体信息请看[文档#Association Object](http://docs.sqlalchemy.org/en/latest/orm/basic_relationships.html#association-pattern)."Association proxies是一个对于“association object”常规用法更加方便的使用技巧。
+
+假设上面的`userkeywords`表具有一些额外的列，我们需要显示映射它们，但是大多数时候我们并不需要直接访问它们。在下面的例子中，我们通过一个引入`UserKeyword`类的新映射来阐释，它其实是上面的`userkeywords`的映射类形式。这个类增加了一个额外的列`special_key`，包含一个我们偶尔会用到的值。我们在User类使用"association proxy"，绑定了`keywords`属性,这个属性桥接了`User.keywords`和每个`UserKeyword.keyword`:
+
+```python
+from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy.orm import relationship, backref
+
+from sqlalchemy.ext.associationproxy import association_proxy
+from sqlalchemy.ext.declarative import declarative_base
+
+
+Base = declarative_base()
+
+
+Class User(Base):
+    __tablename__ = 'user'
+    id = Column(Integer, primary_key=True)
+    name = Column(String(64))
+
+    # "user_keywords"集合to“keyword"属性的一个association_proxy
+    keywords = association_proxy("user_keywords", "keyword")
+    
+    def __init__(self, name):
+        self.name = name
+
+
+class UserKeyword(Base):
+    __tablename__ = 'user_keyword'
+    user_id = Column(Integer, ForeignKey("user.id"), primary_key=True)
+    keyword_id = Column(Integer, ForeignKey("keyword.id"), priamry_key=True)
+    sepecial_key = Column(String(50))
+
+    # "user"/"user_keywords"的双向属性/关系
+    user = relationship(User, 
+                        backref=backref("user_keywords", 
+                                        cascade="all, delete-orphan",
+                                        ))
+
+    # 引用"Keyword"对象
+    keyword = relationship("Keyword")
+
+    def __init__(self, keyword=None, user=None, special_key=None):
+        self.user = user
+        self.keyword = keyword
+        self.special_key = special_key
+
+
+class Keyword(Base):
+    __tablename__ = 'keyword'
+    id = Column(Integer, primary_key=True)
+    keyword = Column('keyword', String(64))
+
+    def __init__(self, keyword):
+        self.keyword = keyword
+
+    def __repr__(self):
+        return 'Keyword(%s)' %repr(self.keyword)
+```
+
+在上面的配置中，我们可以直接针对每个`User`对象的`.keywords`集合进行操作，`UserKeyword`的使用被隐藏了：
+
+```
+>>> user = User('log')
+>>> for kw in (Keyword('new_from_blammo'), Keyword('its_big')):
+...     user.keywords.append(kw)
+...
+>>> print(user.keywords)
+[Keyword('new_from_blammo'), Keyword('its_big')]
+```
+
+在上面例子中，每个`.keywords.append()`操作等同于：
+
+```python
+>>> user.user_keywords.append(UserKeyword(Keyword('its_heavy')))
+```
+
+这个`UserKeyword`关联对象(association object)在这里构成了两个属性；`.keyword`参数直接构成，并且会传入到`Keyword`对象的构造器作为首个参数。`.user`参数将会作为传入`UserKeyword`对象并追加到`User.user_keywords`集合中，当`User.user_keywords`和`UserKeyword`的双向关系建立后，造成的结果就是会自动构成`UserKeyword.user`属性。上面的`special_key`属性会让它保留为默认值`None`。
+
+有些时候我们需要`special_key`有一个值，我们需要显式创建`UserKeyword`.下面例子我们赋予了所有三个参数,在赋值`.user`时将会造成`UserKeyword`追加到`User.user_keywords`集合中：
+
+```pyhton
+>>> UserKeyword(Keyword('its_woord'), user, special_key='my special key')
+```
+
+最后再次调用`association proxy`, 将会返回代表之前所有操作的`Keyword`对象集合:
+
+```python
+>>> user.keywords
+[Keyword('new_from_blammo'), Keyword('its_big'), Keyword('its_heavy'), Keyword('its_wood')]
+```
+
+### 代理一个基于字典的集合
+
+pass
 
