@@ -213,5 +213,79 @@ class Keyword(Base):
 
 ### 代理一个基于字典的集合
 
+association proxy也可以代理一个基于字典的集合。SQLAlchemy的映射通常通常使用`attribute_mapped_collection()`集合类型来创建字典集合，其实还可以使用一种扩展技术:[自定义基于字典的集合](http://docs.sqlalchemy.org/en/latest/orm/collections.html#id1)
+
+association prxoy在发现集合是一个字典时会改变行为。当一个新的值加入到字典后，association proxy实例化过程会传入两个参数到创建函数而不是一个，即key和value.这个创建函数当然就是中间类的构造器，也可以通过这个参数`creator`来自定义。
+
+下面例子中，我们修改了例子中的`UserKeyword`，现在`User.user_keywords`将会使用将会映射为一个字典，`UserKeyword.special_key`将会作为字典的键。我们在`User.keywords`代理中使用了`creator`参数，所以在新元素加入到字典后，这些值可以被正确赋值：
+
+```python
+from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy.orm import relationship, backref
+from sqlalchemy.ext.associationproxy import association_proxy
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm.collections import attribute_mapped_collection
+
+Base = declarative_base()
+
+
+class User(Base):
+    __tablename__ = 'user'
+    id = Column(Integer, primary_key=True)
+    name = Column(String(64))
+
+    # 代理到"user_keywords", 实例化UserKeyword使用"special_key"作为键
+    # 使用"keyword"作为值
+    keywords = association_proxy("user_keywords", "keyword",
+                            creator=lambda k, v:
+                                    UserKeyword(special_key=k, keyword=v))
+    
+    def __init__(self, name):
+        self.name
+
+
+class UserKeyword(Base):
+    __tablename__ = 'user_keyword'
+    user_id = Column(Integer, ForeignKey('user.id'), primary_key=True)
+    keyword_id = Column(Integer, ForeignKey('keyword.id', primary_key=True))
+    special_key = Column(String)
+
+    # 双向user/user_keywords关系
+    # 映射user_keywords为一个字典，用special_key作为它的键
+
+    user = relationship(User, backref=backref(
+        "user_keywords",
+        collection_class=attribute_mapped_collection("special_key"),
+        cascade='all, delete-orphan'
+    ))
+    keyword = relationship("Keyword")
+
+
+class Keyword(Base):
+    __tablename__ = 'keyword'
+    id = Column(Integer, primary_key=True)
+    keyword = Column('keyword', String(64))
+
+    def __init__(self, keyword):
+        self.keyword = keyword
+
+    def __repr__(self):
+        return "Keyword(%s)" % repr(self.keyword)
+```
+
+使用下图可以阐释如何把`.keywords`集合当字典使用，使用`UserKeyword.special_key`作为键，使用`Keyword`对象作为值：
+
+```python
+>>> user = User('log')
+
+>>> user.keywords['sk1'] = Keyword('kw1')
+>>> user.keywords['sk2'] = Keyword['kw2']
+
+>>> print(user.keywords)
+{'sk1': Keyword('kw1'), 'sk2': Keyword('kw2')}
+```
+
+### 混合association proxies
+
 pass
 
