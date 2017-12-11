@@ -437,5 +437,28 @@ q = session.query(User).\
         
         我们要代理的实例属性.
 
-        例如，给定一个`[obj1, obj2]`的目标集合，一个代理
+        例如，给定一个`[obj1, obj2]`的目标集合，一个代理property将会看起来像这样：`[getattr(obj1, attr), getattr(obj2, attr)]`
+
+        如果这个关系是一个**一对一关系**或者使用了`uselist=False`,那么代理property就是一个简单的表达式:`getattr(obj, attr)`
+
+    - `creator`
+
+        可选。
+
+        当一个新的item加入到这个代理集合后,在目标集合中将会新创建并追加一个实例.对于list和set集合，目标类的构造器将会传入"value".对于字典类型,将会传入两个参数：“key"和"value".
+
+        如果你想要创建不同的实例,只需要提供一个`creator`(可调用对象)，接收上面提到的参数，并返回最终的对象即可。
+
+        对于标量关系,如果目标为`None`将会调用`creator`.如果目标存在，对这个代理property的操作将会直接对关联对象使用`setattr()`.
+
+        如果你有一个关联对象具有多个属性,你可以建立多个`association proxies`映射不同的属性.
+
+    - `**kw`: 这些关键字参数将会以关键字参数形式传入到`AssociationProxy`的构造器中。
+
+
+- `sqlalchemy.ext.associationproxy.AssociationProxy(target_collection, attr, creator=None, getset_factory=None, proxy_factory=None, proxy_bulk_set=None, info=None)`
+
+    基类：`sqlalchemy.orm.base.InspectionAttrinfo`
+
+    
         
