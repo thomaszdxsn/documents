@@ -559,4 +559,5 @@ q = session.query(User).\
 
         追加/设置/赋值事件都会被拦截，并且增加新的target_class实例。
 
-        
+- `sqlalchemy.ext.associationproxy.ASSOCIATION_PROXY = symbol('ASSOCIATION_PROXY')`
+
