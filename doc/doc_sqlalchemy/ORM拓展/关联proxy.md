@@ -460,5 +460,103 @@ q = session.query(User).\
 
     基类：`sqlalchemy.orm.base.InspectionAttrinfo`
 
-    
+    一个描述符，可以提供一个对象属性的读/写视图.
+
+    - `__init__(target_collection, attr, creator=None, getset_factory=None, proxy_factory=None, proxy_bulk_set=None, info=None)`
+
+        `AssociationProxy`的构造器。
+
+        `association_proxy()`函数是平常使用的入口点,通过`AssociationProxy`可以直接实例化和继承。
+
+        参数：
+
+        - `target_collection`: 我们想要代理的集合的字符串名称,通常这个集合是通过`relationship()`创建的。
+        - `attr`: 我们想要代理的集合(中对象的)属性.例如，给定一个`[obj1, obj2]`的目标集合，一个代理property将会看起来像这样：`[getattr(obj1, attr), getattr(obj2, attr)]`
+        - `creator`: 可选。上面有描述
+        - `getset_factory`
+
+            可选。代理属性的访问方式一般通过`attr`的类型来自动处理。
+            
+            如果你想自定义属性的访问行为,你需要提供`getset_factory`参数，这个参数是一个工厂函数，生成一个元祖，包括`getter`和`setter`函数.这个工厂函数通过两个参数来调用,底层集合的抽象类型以及这个代理的实例(`collection_type, proxy_property`)。
+
+        - `proxy_factory`
+
+            可选.一般通过嗅探目标集合来决定代理要模仿的集合类型.如果你定义的集合类型**不能通过鸭子类型来判断**或者你想使用一个不同的集合.你需要传入这个参数，这个参数接受一个工厂函数，生成最后的集合.只针对非标量关系使用。
+            
+        - `proxy_bulk_set`
+
+            可选。和`proxy_factory`一起使用.请看下面的`_set()`方法可以获取这个参数的细节问题。
+
+        - `info`
+
+            可选。如果传入了这个参数，我们将会赋值给属性`AssociationProxy.info`.
+
+    - `any(criterion=None, **kwargs)`
+
+        使用语句`EXISTS`生成一个代理的"any"(SQL)表达式.
+        
+        这个语句将会使用`RelationshipProperty.Comparator.any()`和/或者`RelationshipProperty.Comparator.has()`混合生成.
+
+    - `attr`
+
+        返回一个元祖`(local_attr, remote_attr)`.
+
+        这个参数在使用`Query.join()`时可以提供一个方便的方式传入参数：
+
+        `session.query(Parent).join(*Parent.proxied.attr)`
+
+    - `contains(obj)`
+
+        使用语句`EXISTS`生成一个代理的"contains"(SQL)表达式.
+
+        这个语句将会使用`RelationshipProperty.Comparator.any()`,`RelationshipProperty.Comparator.has()`和／或者`RelationshipProperty.Comparator.contains()`混合生成.
+
+    - `extension_type = symbol('ASSOCIATION_PROXY')`
+
+    - `has(criterion=None, **kwargs)`
+
+        使用语句`EXISTS`生成一个代理的"has"(SQL)表达式.
+        
+        这个语句将会使用`RelationshipProperty.Comparator.any()`和/或者`RelationshipProperty.Comparator.has()`混合生成.
+
+    - `info`
+
+        继承自`InspectionAttrInfo`
+
+        关联这个字典的info字典,允许传入用户自定义的数据到这个`InspectionAttr`.
+
+        这个字典在首次被访问后才会被生成(懒加载).
+
+    - `is_aliased_class = False`
+
+    - `is_attribute = False`
+
+    - `is_clause_element = False`
+
+    - `is_instance = False`
+
+    - `is_mapper = False`
+
+    - `is_property = False`
+
+    - `is_selectable = False`
+
+    - `local_attr`
+
+        这个`AssociationProxy`引用的"local"`MapperProperty`.
+
+    - `remote_attr`
+
+        这个`AssociationProxy`引用的"remote"`MapperProperty`.
+
+    - `scalar`
+
+        如果这个`AssociationProxy`代理了一个local侧的标量关系，返回True.
+
+    - `target_class`
+
+        通过`AssociationProxy`处理的一个中间的类。
+
+        追加/设置/赋值事件都会被拦截，并且增加新的target_class实例。
+
         
