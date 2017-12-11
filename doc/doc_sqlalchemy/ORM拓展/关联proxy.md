@@ -287,5 +287,84 @@ class Keyword(Base):
 
 ### 混合association proxies
 
-pass
+将上面例子中的代理关系变为代理标量属性，代理一个关联对象，代理一个字典，我们可以讲这三种技术组合在一起使用。这时`UserKeyword`和`Keyword`都将隐藏起来：
 
+```python
+from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy.orm import relationship, backref
+from sqlalchemy.ext.associationproxy import association_proxy
+from sqlalcehmy.ext.declarative import declarative_base
+from sqlalchemy.orm.collections import attribute_mapped_collection
+
+Base = declarative_base()
+
+
+class User(Base):
+    __tablename__ = 'user'
+    id = Column(Integer, primary_key=True)
+    name = Column(String(64))
+
+    # 和字典例子中一样的"user_keywords" -> "keyword"代理
+    keywords = association_proxy(
+        "user_keywords",
+        "keywords",
+        creator=lambda k, v: UserKeyword(special_key=k, keyword=yv)
+    )
+
+    def __init__(self, name):
+        self.name = name
+
+
+class UserKeyword(Base):
+    __tablename__ = 'user_keyword'
+    user_id = Column(Integer, ForeignKey('user.id'), primary_key=True)
+    keyword_id = Column(Integer, ForeignKey('keyword.id', primary_key=True))
+
+    special_key = Column(String)
+    user = relationship(User, backref=(
+        "user_keywords",
+        collection_class=attribute_mapped_collection("special_key"),
+        cascade="all,delete-orphan"
+    ))
+    # 现在和Keyword之间的关系名改为“kw"
+    kw = relationship("Keyword")
+    # "keyword"改为指向"Keyword.keyword"的一个代理
+    keyword = association_proxy("kw", "keyword")
+
+
+class Keywrod(Base):
+    __tablename__ = 'keyword'
+    id = Column(Integer, primary_key=True)
+    keyword = Column('keyword', String(64))
+
+    def __init__(self, keyword):
+        self.keyword = keyword
+```
+
+现在`User.keywords`是一个字符串对字符串的字典了，`UserKeyword`和`Keyword`对象的创建/移除过程对我们来说都是不可见的了。下面的例子我们通过赋值操作符来解释：
+
+```python
+>>> user = User("log")
+>>> user.keywords = {
+...     "sk1": "kw1",
+...     "sk2": "kw2”    
+... }
+>>> print(user.keywords)
+{"sk1": "kw1", "sk2": "kw2"}
+
+>>> user.keywords["sk3"] = "kw3"
+>>> del user.keywords['sk2']
+>>> print(user.keywords)
+{'sk1': 'kw1', 'sk3': 'kw3'}
+
+>>> #　下面解释如何查看(代理的)底层对象
+>>> print(user.user_keywords['sk3'].kw)
+<__main__.Keyword object at 0x12ceb90>
+```
+
+在我们例子中一个值得注意的地方就是，因为`Keyword`在每个字典操作中都会单独创建，所以这个例子中的使用方式不能去检查"Keyword"的唯一性。在需要检查唯一性的使用场景下，推荐使用[UniqueObject](https://bitbucket.org/zzzeek/sqlalchemy/wiki/UsageRecipes/UniqueObject)，或者一个可比较的创建策略，它们都采用“首先查询，然后创建”的策略来构建`Keyword`类，所以如果一个给定的名称已经存在，就会返回这个已经存在的`Keyword`对象.
+
+
+### 查询Association proxies
+
+pass
