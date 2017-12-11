@@ -47,7 +47,7 @@ curl https://api-3t.sandbox.paypal.com/nvp \
 
 ## Paypal {
     username: 529356441@qq.com
-    password: lin13870965549
+    password: 13870965549
 }
 
 

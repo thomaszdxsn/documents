@@ -367,4 +367,75 @@ class Keywrod(Base):
 
 ### 查询Association proxies
 
-pass
+`AssociationProxy`特性简化了SQL构造，让SQL只关联relationship()的目标属性。例如，在上面使用`association_proxy`的例子中，也可以使用`RelationshipProperty.Comparator.any()`和`RelationshipProperty.Comparator.has()`操作：
+
+```python
+>>> print(session.query(User).filter(User.keywords.any(keyword='jek')))
+SELECT user.id AS user_id , user.name AS user_name
+FROM user
+WHERE EXISTS (SELECT 1
+FROM user_keyword
+WHERE user.id == user_keyword.user_id AND EXISTS(SELECT 1
+FROM keyword
+WHERE keyword.id = user_keyword.keyword_id AND keyword.keyword =: keyword_1))
+```
+
+对于一个标量属性的代理，同样支持`__eq__()`操作：
+
+```python
+>>> print(session.query(UserKeyword).filter(UserKeyword.keyword == 'jek'))
+SELECT user_keyword.*
+FROM user_keyword
+WHERE EXISTS (SELECT 1
+    FROM keyword
+    WHERE keyword.id = user_keyword.keyword_id AND keyword.keyword = :keyword_1)
+```
+
+对于一个标量集合的代理，同样支持`.contains()`:
+
+```python
+>>> print(session.query(User).filter(User.keywords.contains('jek')))
+SELECT user.*
+FROM user
+WHERE EXISTS (SELECT 1
+FROM userkeywords, keyword
+WHERE user.id = userkeywords.user_id
+    AND keyword.id = userkeywords.keyword_id
+    AND keyword.keyword = :keyword_1)
+```
+
+`AssociationProxy`甚至可以用于`Query.join()`，但是稍微需要手动加工一下，即使用`*`unpack这个代理的`.attr`属性:
+
+```python
+q = session.query(User).join(*User.keywords.attr)
+```
+
+`.attr`属性是`AssociationProxy.local_attr`和`AssociationProxy.remote_attr`的一个混合体(所以上面的例子就等于`User.keywords.local_attr, User.keywords.remote_attr = *User.keywords.attr`)，这些属性也是真是的代理属性，可以直接用于查询：
+
+```python
+uka = aliased(UserKeyword)
+ka = aliased(Keyword)
+q = session.query(User).\
+        join(uka, User.keywords.local_attr).\
+        join(ka, User.keywords.remote_attr)
+```
+
+### API
+
+- `sqlalchemy.ext.associationproxy.association_proxy(target_collection, attr, **kw)`
+
+    返回一个Python property, 实现一个属性的视图。这个视图代表了目标集合(关系)的一个属性。
+
+    返回的值是一个`AssociationProxy`的一个实例。
+
+    实现一个Python property，将一个关系（或标量属性）以集合或更简单的值的表现。代理property将会模仿目标的集合类型(list, set, dict)，或者如果就是一个简单的一对一关系的话，这个property就是一个简单的标量值。
+
+    参数：
+
+    - `target_collection`: 我们想要代理的属性名称.这个属性通常是一个`relationship()`映射的一个目标集合,但也可以是一个多对一或者非标量属性。
+    - `attr`
+        
+        我们要代理的实例属性.
+
+        例如，给定一个`[obj1, obj2]`的目标集合，一个代理
+        
