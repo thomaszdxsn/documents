@@ -211,3 +211,136 @@ def lookup(session, id_argument, include_frobnizzle=False):
     return paramterized_query(session).params(id=id_argument).all()
 ```
 
+## 在Session范围内禁用baked query
+
+`Session.enable_baked_queries`可以设置为False，将会让这个Session中的所有查询均不使用缓存查询。
+
+`session = Session(engine, enable_baked_queries=False)`
+
+像所有的session flags一样,同样可以传入到工厂函数`sessionmaker`和`sessionmaker.configure()`.
+
+## 懒加载集成
+
+baked查询集成了`SQLAlchemy.realtionship()`中的懒加载特性.但是有一小部分懒加载子集不能被缓存.
+
+### 选项bake_queries
+
+`relationship()`构造器包含一个flag`relationship.bake_queries`，如果设置为False将会筛选掉缓存的查询.
+
+
+## API文档
+
+- `sqlalchemy.ext.baked.bakery(cls, size=200, _size_alert=None)`
+
+    构建一个新的bakery.
+
+    返回:
+
+    一个`Bakery`实例.
+
+- `sqlalchemy.ext.baked.BakedQuery(bakery, initial_fn, args=())`
+
+    一个`query.Query`对象的创建者(builder)对象.
+
+    - `add_criteria(fn, *args)`
+
+        为这个`BakedQuery`加入一个criteria函数。
+
+        这个函数等同于`BakedQuery.__iadd__`.
+
+    - 类方法`bakery(size=200, _size_alert=None)`
+
+        构建一个新的bakery.
+
+        返回：
+
+        一个`Bakery`实例.
+
+    - `for_session(session)`
+
+        返回这个`BakedQuery`的一个`Result`对象。
+
+        这个方法等同于`BakedQuery.__call__`
+
+    - `spoil(full=False)`
+
+        取消出现在这个`BakedQuery`对象中所有query对象。
+
+        `BakedQuery`可以继续被正常使用,但是另外的creteria的函数并不会被保存.
+
+        参数：
+
+        - `full`: 如果为False, 只有在之后的函数不再被缓存.
+
+    - `with_criteria(fn, *args)`
+
+        为`BakedQuery`增加一个criteria函数。
+
+
+- `sqlalchemy.ext.baked.Bakery(cls_, cache)`
+
+    一个可调用对象，将会返回一个`BakedQuery`.
+
+    这个对象通过类方法`BakedQuery.bakery()`来返回.
+
+
+- `sqlalchemy.ext.baked.Result(bq, session)`
+
+    通过一个session来调用`BakedQuery`.
+
+    `Rusult`对象其实是创建的`query.Query`,或者是从缓存中取回来的:
+
+    - `all()`
+
+        返回所有行。
+
+        等同于`Query.all()`
+
+    - `count()`
+
+        返回"count"
+
+        等同于`Query.count()`
+
+        注意，在这里会使用一个子查询来确保是一个正确的count.
+
+    - `first()`
+
+        返回首行.
+
+        等同于`Query.first()`
+
+    - `get(ident)`
+
+        根据标识符来取回一个对象。
+
+        等同于`Query.get()`
+
+    - `one()`
+
+        返回一行或者抛出异常。
+
+        等同于`Query.one()`
+
+    - `one_or_none()`
+
+        返回１或０个结果，如果有多于１个结果，抛出异常。
+
+        等同于`Query.one_or_none()`
+
+    - `params(*args, **kwargs)`
+
+        将会替换到SQL字符串中的参数.
+
+    - `scalar()`
+
+        返回第一个结果的第一个元素,或者如果没有查询结果情况下返回None.如果发现多行结果，将会抛出异常。
+
+        等同于`Query.scalar()`
+
+    - `with_post_criteria(fn)`
+
+        增加一个criteria函数,将会应用到post-cache.
+
+        将会对从缓存中取回来的Query对象追加这个函数
+    
