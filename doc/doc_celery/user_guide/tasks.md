@@ -556,3 +556,310 @@ def x():
 
 ### State
 
+Celery可以追踪当前任务的状态。状态可以包含成功任务的记过，也可以包含失败任务的异常和traceback。
+
+可以选择若干不同的result backend.它们各有不同的优劣。
+
+在一个任务的生命周期内，它可能会通过若干可能的状态，每个状态会有一些任意的元数据。当一个任务过渡到新的状态后，之前的状态将会被遗弃。
+
+同样有若干组状态，如FAIULURE_STATUS组，READY_STATUS组。
+
+客户端使用一个状态组(PROPAGATE_STATES)类决定是否异常应该向上传播，或者可以决定状态是否应该缓存。
+
+#### Result Backends
+
+如果你想要追踪任务的状态，或者想要任务返回值，那么Celery需要一个地方来存储或者发送状态，并且在晚些时候取回它。可以有若干内置的result backends可供选择：`SQLAlchemy/Django ORM`, `Memcached`, `RabbitMQ/QPid(rpc)`, `Redis` -- 或者你可以自定义你自己的result backend。
+
+没有backend可以在每个场景都适用。你可以了解每个backend的优势和劣势，并选择最适合你的那一种。
+
+##### RPC Result Backend(RabbitMQ/QPid)
+
+RPC result backend(`rpc://`)是一个特殊的请看，它并不会真正的存储状态，而是将它们作为消息发送。一个巨大的差异之处在于一个结果只能被取回一次，在客户端初始化任务的时候。两个不同的程序不能等待同一个结果。
+
+即使有这个限制，如果你只是想实时接受状态的改动，这也是个极好的选择。使用消息意味着客户端不需要为新状态poll.
+
+消息默认是转瞬即逝(transient)的，所以如果broker重启后结果将会消失。可以通过`result_persistent`设置来发送持久化消息。
+
+##### Database Result Backend
+
+把状态存储在数据库是一个很方便的方式，尤其是对于web应用，因为数据库资源随手可得，但是它也有自身的限制：
+
+- 新状态poll到数据的操作开销太大，你可能需要增加poll操作的间隔，比如`result.get()`
+
+- 一些数据库使用默认的事务隔离等级，并不适用于poll操作
+
+    在MySQL中，默认的事务隔离等级是`REPEATABLE-RAED`: 意味着两个事务同时进行时，直到一个事务提交前，一个事务是看不到另一个事务中的修改的。
+
+    **推荐修改为`READ-COMMITTED`隔离等级**
+
+#### 内置状态
+
+##### PENDING
+
+Task正在等待执行，或者处于未知状态。任何没有任务id的任务都是pending状态。
+
+##### STARTED
+
+任务已经启动。默认不会报告这个状态，除非你开启了`app.Task.trace_started`设置。
+
+- `meta-data`: 执行这个任务的子进程的`pid`和`hostname`
+
+##### SUCCESS
+
+任务已经成功执行。
+
+- `meta-data`: 结果中包含这个任务的返回值。
+- `propagates`: YES
+- `ready`: YES
+
+##### FAILURE
+
+失败情况的任务执行结果。
+
+- `meta-data`: `result`包含出现的异常，`traceback`包含异常的追溯信息.
+- `propagates`: YES
+
+##### RETRY
+
+任务已经retried.
+
+- `meta-data`: 任务包含retry出现的异常，`traceback`包含异常的追溯信息。
+- `propagates`: NO
+
+##### REVOKED
+
+任务已经被取消。
+
+- `propagates`: YES
+
+#### 自定义状态
+
+你可以很轻松的定义你自己要的状态，只需要想一个unique的名称即可。状态名称通常是一个大写字符串。
+
+可以使用`update_state()`来更新任务状态：
+
+```python
+@app.task(bind=True)
+def upload_files(self, filenames):
+    for i, file in enumerate(filenames):
+        if not self.request.called_directly:
+            self.update_state(state='PROGRESS',
+                    meta={'current': i, 'total': len(filenames)})
+```
+
+在这个例子中，我创建了一个**PROGRESS**状态，可以告诉应用这个任务正在进行中，并且定义了元数据`meta`，可以获取任务的current和total数据。
+
+#### 创建pickable异常
+
+很少人直到Python的异常必须支持pickle模块。
+
+如果使用pickle作为serialzer，并且异常不能够被pickle，那么任务就不能正常工作。
+
+想要确保你的异常是pickeable的，这个异常**必须**调用内置异常的初始化方法。
+
+
+```python
+# 正确
+class HTTPError(Exception):
+    pass
+
+# 错误
+class HTTPError(Exception):
+
+    def __init__(self, status_code):
+        self.status_code = status_code
+
+# 正确
+class HTTPError(Exception):
+
+    def __init__(self, status_code):
+        self.status_code = status_code
+        Exception.__init__(self, status_code)   # 这一行是必须的(也可使用super()函数)
+```
+
+原则就是：任何自定义异常如果支持参数`*args`, 必须调用`Exception.__init__(self, *args)`
+
+对于关键字参数并没有特殊的支持方式，所以如果你想要保留关键字参数你需要将它们以位置参数的形式传入`Exception.__init__()`
+
+```python
+class HttpError(Exception):
+    
+    def __init__(self, status_code, headers=None, body=None):
+        self.status_code = status_code
+        self.headers = headers
+        self.body = body
+
+        super(HttpError, self).__init__(status_code, headers, body)
+```
+
+
+### Semepredicates(半谓词?)
+
+worker将会把任务封装到以个tracing函数，可以记录任务的最终状态。
+
+有若干异常可以当作信号使用，让函数可以决定如果对待任务的返回。
+
+#### Ignore
+
+任务可以抛出`Ignore`让worker忽略这个任务。这意味着不会记录这个任务的状态，但是它的消息还是可以被ack(从队列中移除)的.
+
+可以将它做什么用呢？可以使用它来实现你的自定义取消功能，或者手动存储一个任务的状态。
+
+下面是一个例子，如果任务在redis集合中则直接取消：
+
+```python
+from celery.exceptions import Ignore
+
+
+@app.task(bind=True)
+def some_task(self):
+    if redis.ismember('tasks.revoked', self.request.id):
+        raise Ignore()
+```
+
+```python
+from celery import states
+from celery.exceptions import Ignore
+
+
+@app.task(bind=True)
+def get_twttes(self, user):
+    timeline = twitter.get_timeline(user)
+    if not self.request.call_redirectly:
+        self.update.state(state=states.SUCCESS, meta=timeline)
+    raise Ignore()
+```
+
+#### Reject
+
+任务抛出`Reject`将会使用诸如`AMQP.basic_reject()`的方法来拒绝一个任务消息。除非激活了配置`Task.acks_late`，否者这个异常不会有效果。
+
+reject一个消息和ack一个消息是同样的效果，但是一些broker可能实现了一些额外的功能。比如RabbitMQ支持一种[Dead Letter Exchanges](http://www.rabbitmq.com/dlx.html)概念，当一个队列配置为DLE，那么被拒绝的消息将会被再次递送。
+
+Reject同样可以用于re-queue消息，但是请小心使用，因为这很容易造成死消息循环。
+
+下面是一个例子，在碰到无内存可用的请看下拒绝一个消息：
+
+```python
+import errono
+from celery.exceptions import Reject
+
+
+@app.task(bind=True, acks_late=True)
+def render_scene(self, path):
+    file = get_file(path)
+    try:
+        renderer.render_scene(file)
+    
+    # 如果这个文件太大，导致内存不够用
+    # 我们就会拒绝它，让它以Dead Letter Exchanges来重新递送
+    # 我们可以手动监测这个情形
+    except MemoryError as exc:
+        raise Reject(exc, requeue=False)
+    except OSError as exc:
+        if exc.errorno = errno.ENOMEM:
+            raise Reject(exc, requeue=False)
+
+    # 在其它错误情况下，我们在10秒后retry
+    except Exception as exc:
+        raise self.retry(exc, countdonw=10)
+```
+
+下面是一个将消息re-queueing的例子：
+
+```python
+from celery.exceptions import Reject
+
+
+@app.task(bind=True, acks_late=True)
+def requeues(self):
+    if not self.request.delivery_info['redelivered']:
+        raise Reject('no reason', requeue=True)
+    print('received two times')
+```
+
+#### Retry
+
+`Retry`异常由`Task.retry()`方法抛出，告诉worker这个任务要被retry。
+
+
+### 自定义任务类
+
+所以继承自`app.Task`类的任务。`run()`方法都会变成任务的body.
+
+作为一个例子，考虑下面这些代码：
+
+```python
+@app.task
+def add(x, y):
+    return x + y
+```
+
+差不多在幕后做了下面这些事情：
+
+```python
+class _AddTask(app.Task):
+
+    def run(self, x, y):
+        return x + y
+    
+add = app.tasks[_AddTask.name]
+```
+
+#### Instantiation
+
+任务并**不会**在每次请求时都实例化，而是将这个任务注册到`task registry`，作为一个全局实例。
+
+这意味着，每个进程中每个`task.__init__()`都不会被调用两次，所以这个task类在语义上等同于`Actor`模型。
+
+如果你有下面这样一个任务：
+
+```python
+from celery import Task
+
+
+class NativeAuthenticateServer(Task):
+
+    def __init__(self):
+        self.users = {'george': 'password'}
+
+    def run(self, username, password):
+        try:
+            return self.users[username] == password
+        except KeyError:
+            return False
+```
+
+然后你在相同进程中路由(route)每个请求时，将会保持每个请求的状态。
+
+这个模式也可以用于缓存资源，例如，一个Task类可以缓存一个数据库链接：
+
+```python
+from celery import Task
+
+
+class DatabaseTask(Task)
+    _db = None
+
+    @property
+    def db(self):
+        if self._db is None:
+            self._db = Database.connection()
+        return self._db
+```
+
+然后可以这样增加任务：
+
+```python
+@app.task(base=DatabaseTask)
+def process_rows():
+    for row in process_rows.db.table.all():
+        process_row(row)
+```
+
+现在在每个进程中，`process_rows`任务的`db`属性总是保留。
+
+
+### Handlers
+
+
