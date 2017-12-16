@@ -1,3 +1,5 @@
+[TOC]
+
 ## Next Step
 
 在`first step`中只介绍了Celery最基础的一部分用法。在这里我们介绍的更加详细，包括怎么让Celery来支持你的应用或者库。
@@ -336,3 +338,190 @@ s2是一个partial签名，需要另一个参数才能使他完整：
 >>> s3 = add.s(2, 2, debug=True)
 >>> s3.delay(debug=False)       # debug现在是False
 ```
+
+一个有状态的签名支持这些调用API：
+
+- `sig.apply_async(args=(), kwargs={}, **options)`
+
+    调用这个签名已经partial位置参数，关键字参数。同样支持partial options。
+
+- `sig.delay(*args, **kwargs)`
+
+    `apply_async`的unpack参数版本。所有的参数都会prepend到签名中，关键字参数将会覆盖存在的参数。
+
+看起来很有用，但是我们到底能用它们来做些啥？在说明它们的作用之前，我必须介绍一些画布原语(canvas primitives).
+
+
+### The primitives
+
+这些primitives都是签名对象本身，所以它们可以任意拼接组合来构成一个复杂的工作流。
+
+> 注意
+>> 这些例子取回了任务结果，所以需要配置一个result backend.
+
+让我们看一些例子。
+
+#### Groups
+
+一个`group`调用并行(parallel)调用一个任务列表，它会返回一个特殊的result实例让我们查看一个group的结果，并且能够按顺序取回它们的返回值：
+
+```python
+>>> from celery import group
+>>> from proj.tasks import add
+
+>>> group(add.s(i, i) for i in range(10))().get()
+[0, 2, 4, 6, 8, 10, 12, 14, 16, 18]
+```
+
+- `partial group`
+
+```python
+>>> g = group(add.s(i) for i in range(10))
+>>> g(10).get()
+[10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+```
+
+#### Chains
+
+任务可以链接(linked)在一起，可以在一个任务完成后调用另一个，这里重载了管道操作符:
+
+```python
+>>> from celery import chain
+>>> from proj.tasks import add, mul
+
+# (4 + 4) * 8
+>>> chain(add.s(4, 4) | mul.s(8))().get()
+64
+```
+
+或者一个`partial chain`:
+
+```python
+>>> # (? + 4) * 8
+>>> g = chain(add.s(4) | mul.s(8))
+>>> g(4).get()
+64
+```
+
+Chains也可以写成下面这样(不需要使用`chain`):
+
+```python
+>>> (add.s(4, 4) | mul.s(8))().get()
+64
+```
+
+#### Chord
+
+chord是一个group和一个callback：
+
+```python
+>>> from celery import chord
+>>> from proj.tasks import add, xsum
+
+>>> chord((add.s(i, i) for i in range(10)), xsum.s())().get()
+90
+```
+
+由于这些原语(primitives)都是签名(signature)类型，你可以将它任意组合使用，例如：
+
+```python
+>>> upload_document.s(file) | group(apply_filter.s() for filter in filters)
+```
+
+## Routing
+
+Celery支持AMQP支持的所有routing能力，但是它通用支持一个简单的routing，即把消息发送给一个命名队列。
+
+`task_routes`设置能够让你将任务以名称来路由，并且让一切都集中在一个地方配置：
+
+```python
+app.conf.update(
+    task_routes = {
+        'proj.tasks.add': {"queue": "hipri"}
+    },
+)
+```
+
+你也可以在运行时使用参数`apply_async.queue`为任务指定队列：
+
+```python
+>>> from proj.tasks import add
+>>> add.apply_async((2, 2), queue='hipri')
+```
+
+现在你可以设定一个worker来消费这个队列，可以通过命令行`celery worker -Q`来实现：
+
+```python
+$ celery -A proj worker -Q hipri
+```
+
+你可以通过逗号分割来指定多个队列。比如你想让一个worker消费默认队列以及`hipri`队列，默认队列因为历史原因名称叫做`celery`: 
+
+```python
+$ celery -A proj worker -Q hipri,celery
+```
+
+队列名称的顺序不重要，worker会将它们相等对待。
+
+## 远程控制
+
+如果你使用RabbitMQ(AMQP)，Redis，或者Qpid作为broker，那么你可以在运行时控制和监测worker。
+
+例如，你可以查看当前worker在进行哪个任务：
+
+`$ celery -A proj inspect active`
+
+这个系统通过广播消息来实现，所以cluster中所有的worker都将收到控制命令。
+
+你也可以使用命令行选项`--destination`来指定一个或多个worker作为被请求对象：
+
+`$ celery -A proj inspect active --destination=celery@example.com`
+
+如果没有提供destination，那么每个worker都会作为被请求对象。
+
+`celery inspect`命令不会改变worker的任何东西，它只会返回根据worker内部情况返回信息和统计数据。
+
+`celery control`命令可以在运行时修改worker。
+
+例如，你可以让worker激活事件消息(用来监听任务和worker)：
+
+`$ celery -A proj control enable_events`
+
+当事件激活后，你可以使用event dumper来查看哪个woker在工作：
+
+`$ celery -A proj events --dump`
+
+或者你可以开启curse接口：
+
+`$ celery -A proj events`
+
+当你结束监听以后，你可以再次禁用事件：
+
+`$ celery -A proj control disable_events`
+
+`celery status`命令同样用于远程控制，可以展示cluster中的一组在线worker：
+
+`$ celery -A proj status`
+
+## 时区
+
+所有的时间，日期和内部消息都是使用UTC时区。
+
+当一个worker收到一个消息后，例如收到一个countdown以后将会吧UTC时间转换为本地时间。如果你想使用和系统不一样的时区，可以通过`timezone`设置来完成：
+
+`app.conf.timezone = 'Europe/London'`
+
+## 优化
+
+默认的配置并没有为吞吐量(throughput)优化，它会试图在众多短任务和少部分长任务之间作平衡，在公平调度和吞吐量之间协商。
+
+如果你有严格的调度要求，或者需要优化吞吐量，那么你需要阅读`Optimizing Guide`.
+
+如果你在使用RabbitMQ，那么你可以安装`librabbitmq`模块：这是一个C实现的AMQP客户端。
+
+`$ pip install librabbitmq`
+
+
+
+
+
