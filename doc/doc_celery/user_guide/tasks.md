@@ -1061,3 +1061,183 @@ worker处理的任务应该尽可能的接近数据。最好的情况是在内�
 
 #### 状态(State)
 
+由于Celert是一个**分布式系统**，你不可能直到任务被哪个进程或者哪台机器在处理。
+
+古老的`async`谚语告诉我们"asserting the world is the responsibility of the task".因为任务被请求后它的世界观就已经改变了，所以任务应该用来确认将世界变成它应该变成的那样；如果你有一个任务对一个搜索引擎re-index工作，搜索引擎应该最多每5分钟re-index一次，必须让任务来负责这件事，而不是调用者。
+
+另一个gotcha是Django model对象。它们不应该作为参数传入到任务中。最好在任务启动时从数据库重新获取对象，使用旧对象的数据很可能造成竟态(race conditon).
+
+想象一下下面的场景，你有一篇文章和一个任务，任务可为文章自动扩充一些缩略语：
+
+```python
+class Article(models.Model):
+    title = models.CharField()
+    body = models.TextField()
+
+
+@app.task
+def expand_abbreviations(article):
+    article.body.replace('MyCorp', 'My Corporation')
+    article.save()
+```
+
+首先，一个作者创建了一篇文章并保存了它，然后作者点击了一个按钮初始化这个缩略语任务：
+
+```python
+>>> article = Article.objects.get(id=102)
+>>> expand_abbreviation.delay(article)
+```
+
+现在，碰巧队列很忙，任务在两分钟后以后才会被运行。与此同时另一个作者改动了这篇文章，所以在任务最终被运行时，文章的body将会变回第一个作者创建时的样子，因为在任务初始化时传入的参数即是这样。
+
+修复race condition是很简单的，只需使用article_id代替article_obj即可：
+
+```python
+@app.task
+def expand_abbreviations(article_id):
+    article = Article.objects.get(id=article_id)
+    article.body.replace('MyCorp', 'My Corporation')
+    article.save()
+```
+
+```python
+>>> expand_abbreviations.delay(article_id)
+```
+
+使用这个方法同样具有性能上面的好处，因为发送数据量大的消息也是有开销的。
+
+#### 数据库事务(database transactions)
+
+让我们看一下另一个例子：
+
+```python
+from django.db import transaction
+
+
+@transaction.commit_on_success
+def create_article(request):
+    article = Article.objects.create()
+    expand_abbreviations.delay(article.pk)
+```
+
+这是一个Django的view，首先在数据库中创建了一个article对象，然后将它的主键传入到任务中。它使用了`commit_on_success`装饰器，这个装饰器会在view返回时提交这个事务，或者会在view抛出错误时将事务回滚。
+
+这里存在一个race condition，即任务开始执行前事务还没有提交的这种情况；也就是数据库对象这时候还不存在。
+
+解决方案是使用`on_commit`回调，这个回调会在事务成功提交后再执行。
+
+```python
+from django.db.transaction import on_commit
+
+
+def create_article(request):
+    article = Article.objects.create()
+    on_commit(lambda: expand_abbreviations.delay(article.pk))
+```
+
+### 例子
+
+让我们考虑一个现实世界的例子：一个博客的comment发布需要筛选一些spam。当这个comment创建后，spam筛选会在后台运行，所以用户不需要等待这个任务的结束。
+
+```python
+# blog/models.py
+
+from django.db import models
+from django.utils.translation import ugettext_lazy as _
+
+
+class Comment(models.Model):
+    name = models.CharField(_('name'), max_length=64)
+    email_address = models.EmailField(_("email_address"))
+    homepage = models.URLField(_('home_page'),
+                              blank=True, verify_exists=False)
+    comment = models.TextField(_('comment'))
+    pub_date = models.DateTimeField(_("Published date"),
+                                    editable=False, auto_add_now=True)
+    is_spam = models.BooleanField(_('spam?'),
+                                 default=False, editable=False)
+
+
+    class Meta:
+        verbose_name = _("comment")
+        verbose_name_plurl = _("comments")
+```
+
+在view中我们首先将comment在数据库中创建，然后在后台运行一个spam筛选的任务。
+
+```python
+from django import forms
+from django.http import HttpResponseRedirect
+from django.template.context import RequestContext
+from django.shortcuts import get_object_or_404, render_to_response
+
+from blog import tasks
+from blog.models import Comment
+
+
+class CommentForm(forms.ModelForm):
+    
+    class Meta:
+        model = Comment
+
+
+def add_comment(request, slug, template_name='comments/create.html'):
+    post = get_object_or_404(Entry, slug=slug)
+    remote_addr = request.META.get('REMOTE_ADDR')
+    
+    if request.method == 'POST':
+        form = CommentForm(request.POST, request.FILES)
+        if form.is_valid():
+            comment.save()
+            # 异步检查spam comment
+            tasks.spam_filter.delay(comment_id=comment.id,
+                                    remote_addr=remote_addr)
+            return HttpResponseRedirect(post.get_absolute_url())
+    else:
+        form = CommentForm()
+
+    context = RequestContext(request, {'form': form})
+    return render_to_response(template_name, 
+                    context_instance=context)
+```
+
+筛选spam comment我选择使用Akismet的服务。
+
+```python
+from celery import Celery
+
+from akismet import Akismet
+
+from django.core.exceptions import ImproperlyConfigured
+from django.contrib.sites.models import Site
+
+from blog.models import Comment
+
+app = Celery(broker='ampq://')
+
+
+@app.task
+def spam_filter(comment_id, remote_addr=None):
+    logger = spam_filter.get_logger()       # 获取logger(这么方便?)
+    logger.info('Running spam filter for comment %s', comment_id)
+    
+    comment = Comment.objects.get(pk=comment_id)
+    current_domain = Site.objects.get_current().domain
+    akismet = Akismet(settings.AKISMET_KEY, 
+                    'http://{0}'.format(domain))
+    if not akismet.verify_key():
+        raise ImproperlyConfigured('Invalid AKISMET_KEY')
+
+    is_spam = akismet.comment_check(user_ip=remote_addr,
+                        comment_content=comment.comment,
+                        comment_author=comment.name,
+                        comment_author_email=comment.email_address)
+    if is_spam:
+        comment.is_spam = True
+        comment.save()
+
+    return is_spam
+```
+
+
+
