@@ -860,6 +860,204 @@ def process_rows():
 现在在每个进程中，`process_rows`任务的`db`属性总是保留。
 
 
-### Handlers
+#### Handlers(Task的方法)
 
+
+- `after_return(self, status, retval, task_id, args, kwargs, einfo)`
+
+    在任务返回后调用的handler.
+
+    参数:
+
+    - `status`: 当前的任务状态
+    - `retval`: 任务返回的值/异常
+    - `task_id`: 独一的任务ID
+    - `args`: 返回的任务的初始位置参数
+    - `kwargs`: 返回任务的初始关键字参数
+    - `einfo`: 关键字参数，`ExceptionInfo`实例，包含traceback（如果有的话）
+
+- `on_failure(self, exc, task_id, args, kwargs, einfo)`
+
+    如果任务失败将会被woker调用的handler.
+
+    参数:
+
+    - `exc`: 这个任务抛出的异常
+    - `task_id`: 独一的任务ID
+    - `args`: 返回的任务的初始位置参数
+    - `kwargs`: 返回任务的初始关键字参数
+    - `einfo`: 关键字参数，`ExceptionInfo`实例，包含traceback（如果有的话）
+
+- `on_retry(self, exc, task_id, args, kwargs, einfo)`
+
+    当任务retry时将会被worker调用的handler.
+
+    参数:
+
+    - `exc`: 这个任务抛出的异常
+    - `task_id`: 独一的任务ID
+    - `args`: 返回的任务的初始位置参数
+    - `kwargs`: 返回任务的初始关键字参数
+    - `einfo`: 关键字参数，`ExceptionInfo`实例，包含traceback（如果有的话）
+
+- `on_success(self, retval, task_id, args, kwargs)`
+
+    - `retval`: 任务返回的值/异常
+    - `task_id`: 独一的任务ID
+    - `args`: 返回的任务的初始位置参数
+    - `kwargs`: 返回任务的初始关键字参数
+
+
+### How it works?
+
+这里介绍一些技术细节。这部分内容不是你必须知道的，但是你可能会有兴趣。
+
+所有定义的任务都会列入`registry`清单。registry包含一组任务名称和它们的任务类。你可以手动查看这个registry:
+
+```python
+>>> from projc.celery import app
+>>> app.tasks
+{'celery.chord_unlock':
+    <@task: celery.chord_unlock>,
+ 'celery.backend_cleanup':
+    <@task: celery.backend_cleanup>,
+ 'celery.chord':
+    <@task: celery.chord>}
+
+```
+
+这是Celery的内置任务清单。注意只有任务的模块被imported以后才会讲任务注册到registry.
+
+`@app.task`装饰器负责将你的任务注册到应用的任务registry中。
+
+当任务发送后，并没有把函数代码发送，只是发送了要执行的任务名称。在worker接受到消息后，它会在自己的任务registry中搜索这个任务名称，最后找到要执行的代码。
+
+这意味着你的worker应该总是和客户端的代码同步。这是一个设计上的缺点，热更新的技术正在想办法解决中。
+
+### Tips and Best Practices
+
+#### 如果你不是真的需要，那就忽略任务的执行结果
+
+如果你不在乎任务的结果，确保设置了`ignore_result`选项，毕竟存储结果将会浪费时间和资源.
+
+```python
+@app.task(ignore_result=False)
+def mytask():
+    something()
+```
+
+结果可以全局禁用，通过设置`task_ignore_result`.
+
+#### 更多优化tips
+
+请看官方文档的[Optimizing Guide](http://docs.celeryproject.org/en/latest/userguide/optimizing.html#guide-optimizing)
+
+
+#### 避免调用同步的子任务
+
+如果一个任务需要等待另一个任务的结果，这种任务的效率是很低的，甚至可能会导致worker池耗尽而死锁.
+
+请确保代码的异步设计，比如使用`callback`:
+
+```python
+# bad_example.py
+@app.task
+def update_page_info(url):
+    page = fetch_page.delay(url).get()
+    info = parse_page.delay(url, page).get()
+    store_page_info.delay(url, info)
+
+
+@app.task
+def fetch_page(url):
+    return myhttplib.get(url)
+
+
+@app.task
+def parse_page(url, page):
+    return myparser.parse_document(page)
+
+
+@app.task
+def store_page_info(url, info):
+    return PageInfo.objects.create(url, info)
+```
+
+```python
+# good_example.py
+
+def update_page_info(url):
+    # fetch_page -> parse_page -> store_page
+    chain = fetch_page.s(url) | parse_page.s(url) | store_page_info.s(url)
+    chain()
+
+
+@app.task()
+def fetch_page(url):
+    return myhttplib.get(url)
+
+
+@app.task()
+def parse_page(page):
+    return myparser.parse_document(page)
+
+
+@app.task(ignore_result=True)
+def store_page_info(info, url):
+    PageInfo.objects.create(url=url, info=info)
+```
+
+在下面的例子中，我们使用签名特性实现的`chain()`方法。
+
+默认情况下, celery并不会让你在任务中同步运行另一个任务(所以上面的`bad_example.py`并不能运行)，除非一些极端罕见的情况。**警告**: 不推荐同步运行子任务：
+
+```python
+@app.task
+def update_page_info(url):
+    page = fetch_page.delay(url).get(disable_sync_subtasks=False)
+    info = parse_page.delay(url, page).get(disable_sync_subtasks=False)
+    store_page_info.delay(url, info)
+
+    
+@app.task
+def fetch_page(url):
+    return myhttplib.get(url)
+
+
+@app.task
+def parse_page(url, page):
+    return myparser.parse_document(page)
+
+
+@app.task
+def store_page_info(url, info):
+    return PageInfo.objects.create(url, info)
+```
+
+
+### 性能和策略(performance and strategies)
+
+#### 细粒度（Granularity）
+
+任务细粒度是指每个子任务的计算重量。一般情况下，最好是将任务分解成多个小任务，避免运行一个耗时很长的任务。
+
+对于小一些的任务，你可以并行处理很多这种任务，不会导致worker堵塞。
+
+不过，将任务分割会带来额外的开销：需要传递消息，数据需要存储等等。
+
+所以这中间的权衡需要仔细把握。
+
+推荐书目: [Art of Concurrency](http://oreilly.com/catalog/9780596521547)
+
+#### Data locality
+
+worker处理的任务应该尽可能的接近数据。最好的情况是在内存中有一份拷贝，最坏的情况是从另一个大陆讲数据传输过来。
+
+如果数据离你很远，你可能需要运行另一个worker将它拿过来。
+
+在不同的worker之间分享数据的一个最简单的方式就是使用*分布式缓存系统*，如`memcached`.
+
+推荐书目: [Distributed Computing Economics](http://research.microsoft.com/pubs/70001/tr-2003-24.pdf)
+
+#### 状态(State)
 
