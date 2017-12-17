@@ -240,3 +240,82 @@ class MyClass(Base):
             )
 ```
 
+`__table__`的方法可以把注意力放在建立表的metadata上面，但是同时又能兼具declarative的优势。下面是一个反射类的例子：
+
+```python
+from sqlalchemy.ext.declarative import declarative_base
+
+
+Base = declarative_base()
+Base.metadata.reflect(some_engine)
+
+
+class User(Base):
+    __table__ = metadata.tables['user']
+    
+
+class Address(Base):
+    __table__ = metadata.tables['address']
+```
+
+注意在使用`__table__`方法时，这个对象是可以直接拿来使用的：
+
+```python
+class MyClass(Base):
+    __table__ = Table('my_table', Base.metadata,
+                    Column('id', Integer, primary_key=True),
+                    Column('name', String(50)))
+
+    widgets = relationship(Widet,
+                    primaryjoin=Widget.my_class_id==__table__.c.id)
+```
+
+另外可以对table对象的属性生成同义词(synonym):
+
+```python
+from sqlalchemy.ext.declarative import synonym_for
+
+
+class MyClass(Base):
+    __table__ = Table('my_table', Base.metadata,
+        Column('id', Integer, primary_key=True),
+        Column('name', String(50))
+    )
+
+    _name = __table__.c.name
+
+    @synonym_for('_name')
+    def name(self):
+        return "Name: %s" %_name
+```
+
+### 使用Declarative和反射
+
+可以通过建立一个`Table`然后使用`autoload=True`来轻松的建立映射类：
+
+```python
+class MyClass(Base):
+    __table__ = Table('mytable', Base.metadata,
+                    autoload=True, autoload_with=some_engine)
+```
+
+有一种方式可以无需声明engine。即使用Mixin`DeferredReflection`，只有当调用`prepare()`之后才会进行真正的反射：
+
+```python
+from sqlalchemy.ext.declarative import declarative_base, DeferredReflection
+
+Base = declarative_base(engine=DeferredReflection)
+
+
+class Foo(Base):
+    __tablename__ = 'foo'
+    bars = relationship('Bar')
+
+
+class Bar(Base):
+    __tablename__ = 'bar'
+    foo_id = Column(Integer, ForeignKey('foo.id'))
+    
+
+Base.prepare(e)
+```
