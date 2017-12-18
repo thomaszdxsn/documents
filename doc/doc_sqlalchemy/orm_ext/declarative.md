@@ -467,3 +467,304 @@ class Engineer(Person):
     name = Column(String(50))
 ```
 
+## Mixin&Base Class
+
+使用`declarative`的一个常见情况是需要共享一些功能，比如设置一个通用类，一些通用的表选项，或者其它映射属性。
+
+```python
+from sqlalchemy.ext.declarative import declared_attr
+
+
+class MyMixin(object):
+
+    @declared_attr
+    def __tablename__(cls):
+        return cls.__name__.lower()
+
+    __table_args__ = {"mysql_engine": 'InnoDB'}
+    __mapper_args__ = {"always_refresh": True}
+
+    id = Column(Integer, primary_key=True)
+
+
+class MyModel(MyMixin, Base):
+    name = Column(String(1000))
+```
+
+上面例子中，`MyModel`会包含一个"id"列作为主键，`__tablename__`属性将会衍生自类本身的名称，已经会继承`MyMixin`里面的`__table_args__`和`__mapper_args__`.
+
+
+### Argumenting the Base
+
+除了使用纯mixin，这章节使用的技术大多应用于base class本身。可以通过`declarative_base()`的`cls`属性来指定：
+
+```python
+from sqlalchemy.ext.declarative import declared_attr
+
+
+class Base(object):
+    @declared_attr
+    def __tablename__(cls):
+        return cls.__table__.lower()
+
+    __table_args__ = {"mysql_engine": 'InnoDB'}
+
+    id = Column(Integer, primary_key=True)
+
+
+from sqlalchemy.ext.declarative import declarative_base
+
+Base = declarative_base(cls=Base)
+
+
+class MyModel(Base):
+    name = Column(String(1000))
+```
+
+### Mixin in Columns
+
+在一个列中指定一个mixin的常用方式是：
+
+```python
+class TimestampMixin(object):
+    created_at = Column(DateTime, default=datetime.now())
+
+
+class MyModel(TiemstampMixin, Base):
+    __tablename__ = 'test'
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(1000))
+```
+
+```python
+from sqlalchemy.ext.declarative import declared_attr
+
+
+class ReferrenceAddressMixin(object):
+    @declared_attr
+    def address_id(cls):
+        return Column(Integer, ForeignKey('address.id'))
+
+
+class User(ReferenceAddressMixin, Base):
+    __tablename__ = 'user'
+    id = Column(Integer, primary_key=True)
+```
+
+### Mixin in Relationships
+
+```python
+class RefTargetMixin(object):
+    @declared_attr
+    def target_id(cls):
+        return Column('target_id', ForeignKey('target.id'))
+
+    @declared_attr
+    def target(cls):
+        return relationship('Target')
+
+
+class Foo(RefTargetMixin, Base):
+    __tablename__ = 'foo'
+    id = Column(Integer, primary_key=True)
+
+class Bar(RefTargetMixin, Base):
+    __tablename__ = 'bar'
+    id = Column(Integer, primary_key=True)
+
+class Target(Base):
+    __tablename__ = 'target'
+    id = Column(Integer, primary_key=True)
+```
+
+#### Using Advanced Relationship Argument
+
+```python
+class RefTargetMixin(object):
+    @declared_attr
+    def target_id(cls):
+        return Column('target_id', ForeignKey('target.id'))
+
+
+    @declared_attr
+    def target(cls):
+        return relationship(Target,
+                    primaryjoin=Target.id==cls.target.id) # 这种用法不对
+```
+
+使用上面的类作为mixin，将会获得错误:
+
+```python
+sqlalchemy.exc.InvalidRequestError: this ForeignKey's parent column is not yet associated with a Table.
+```
+
+上面的情况可以使用lambda来解决：
+
+```python
+class RefTargetMixin(object):
+    @declared_attr
+    def target_id(cls):
+        return Column('target_id', ForeignKey('target.id'))
+
+    @declared_attr
+    def target(cls):
+        return relationship(Target,
+                primaryjoin=lambda: Target.id == cls.target_id)
+```
+
+或者也可以使用字符串形式:
+
+```python
+class RefTargetMixin(object):
+    @declared_attr
+    def target_id(cls):
+        return Column('target_id', ForeignKey('target.id'))
+
+    @declared_attr
+    def target(cls):
+        return relationship('Target',
+                primaryjoin="Target.id==%s.target_id" %cls.__name__)
+```
+
+
+### Mixin in deferred(), column_property(), and other MapperProperty classes
+
+```python
+class SomethingMixin(object):
+    @declared_attr
+    def dprop(cls):
+        return deferred(Column(Integer))
+
+        
+class Something(SomethingMixin, Base):
+    __tablename__ = 'something'
+```
+
+```python
+class SomethingMixin(object):
+    x = Column(Integer)
+    y = Column(Integer)
+
+    @declared_attr
+    def x_plus_y(cls):
+        return column_property(cls.x + cls.y)
+```
+
+### Mixin in Association Proxy and Other Attributes
+
+```python
+from sqlalchemy import Column, Integer, ForeignKey, String
+from sqlalchemy.orm import relationship
+from sqlalchemy.ext.associationproxy import association_proxy
+from sqlalchemy.ext.declarative import declarative_base, declared_attr
+
+Base = declarative_base()
+
+
+class HasStringCollection(object):
+    @declared_attr
+    def _strings(cls):
+        class StringAttribute(Base):
+            __tablename__ = cls.stinrg_table_name
+            id = Column(Integer, primary_key=True)
+            value = Column(String(50), nullable=False)
+            parent_id = Column(Integer,
+                            ForeignKey('%s.id' %cls.__tablename__),
+                            nullable=False)
+
+            def __init__(self, value):
+                self.value = value
+
+        return relationship(StringAttribute)
+
+    @declared_attr
+    def strings(cls):
+        return association_proxy('_strings', 'value')
+
+
+class TypeA(HasStringCollection, Base):
+    __tablename__ = 'type_a'
+    string_table_name = 'type_a_strings'
+    id = Column(Integer(), primary_key=True)
+
+
+class TypeB(HasStringCollection, Base):
+    __tablename__ = 'type_b'
+    string_table_name = 'type_b_strings'
+    id = Column(Integer(), primary_key=True)
+```
+
+### Controlling table inheritance with mixins
+
+```python
+from sqlalchemy.ext.declarative import declared_attr
+
+
+class Tablename:
+    @declared_attr
+    def __tablename__(cls):
+        return cls.__name__.lower()
+
+
+class Person(Tablename, Base):
+    id = Column(Integer, primary_key=True)
+    discriminator = Column('type', String(50))
+    __mapper_args__ = {'polymorphic_on': discriminator}
+
+
+class Engineer(Person):
+    __tablename__ = None
+    __mapper_args__ = {'polymorhpic_on': 'engineer'}
+    primary_language = Column(String(50))
+```
+
+
+```python
+from sqlalchemy.ext.declarative import declared_attr
+from sqlalchemy.ext.declarative import has_inherited_table
+
+
+class Tablename(object):
+    @declared_attr
+    def __tablename__(cls):
+        if has_inherited_table(cls):
+            return None
+        return cls.__name__.lower()
+
+
+class Person(Tablename, Base):
+    id = Column(Integer, primary_key=True)
+    discriminator = Column('type', String(50))
+    __mapper_args__ = {'polymorhic_on': discriminator}
+
+
+class Engineer(Person):
+    primary_language = Column(String(50))
+    __mapper_args__ = {'polymorhpic_identity': 'engineer'}
+```
+
+### Mixing in Columns in Inheritance Scenarios
+
+pass
+
+### Combining Table/Mapper Arguments from Multiple Mixins
+
+pass
+
+### Creating Indexes with Mixins
+
+```python
+class MyMixin(object):
+    a = Column(Integer)
+    b = Column(Integer)
+
+    @declared_attr
+    def __table_args__(cls):
+        return (Index('test_idx_%s' %cls.__tablename__, 'a', 'b'),)
+
+
+class MyModel(MyMixin, Base):
+    __tablename__ = 'atable'
+    c = Column(Integer, primary_key=True)
+```
