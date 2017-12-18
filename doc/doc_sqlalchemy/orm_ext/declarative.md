@@ -319,3 +319,151 @@ class Bar(Base):
 
 Base.prepare(e)
 ```
+
+## 继承配置
+
+declarative支持三种形式继承方式。
+
+### Joined Table Inheritance
+
+Joined Table继承通过子类继承并且定义了它们自己的表：
+
+```python
+class Person(Base):
+    __tablename__ = 'people'
+    id = Column(Integer, primary_key=True)
+    discriminator = Column('type', String(50))
+    __mapper_args__ = {'polymorphic_on': discriminator}
+
+
+class Engineer(Person):
+    __tablename__ = 'engineers'
+    __mapper_args__ = {'polymorphic_on': 'engineer'}
+    id = Column(Integer, ForeignKey("people.id") primary_key=True)
+    primary_language = Column(String(50))
+```
+
+注意上面的`Engineer.id`属性，由于它和`People.id`属性具有相同的属性名，将会同时表现于`people.id`和`engineers.id`列，如果直接查询将会首先查询`Engineer.id`列：
+
+```python
+class Engineer(Person):
+    __tablename__ = 'engineers'
+    __mapper_args__ = {'polymorhpic_identity': 'engineer'}
+    engineer_id = Column('id', Integer, ForeignKey('people.id'),
+                    primary_key=True)
+    primary_language = Column(String(50))
+```
+
+### Single Table Inheritance
+
+Single Table继承通过子类定义，并且没有它自己的表；你可以不用输入`__table__`和`__tablename__`属性:
+
+```python
+class Person(Base):
+    __tablename__ = 'people'
+    id = Column(Integer, primary_key=True)
+    discriminator = Column('type', String(50))
+    __mapper_args__ = {'polymorhpic': discriminator}
+
+    
+class Engineer(Person):
+    __mapper_args__ = {"polymorphic_identity": "enginerr"}
+    primary_language = Column(String(50))
+```
+
+#### 解决列冲突
+
+```python
+class Person(Base):
+    __tablename__ = 'people'
+    id = Column(Integer, primary_key=True)
+    discriminator = Column('type', String(50))
+    __mapper_args__ = {"polymorhpic_on": discriminator}
+
+    
+class Engineer(Person):
+    __mapper_args__ = {'polymorphic_identity": "engineer"}
+    start_data = Column(DateTime)
+
+
+class Manager(Person):
+    __mapper_args__ = {'polymorhpic_identity': "manager"}
+    start_date = Column(DateTime)
+```
+
+`start_date`列在`Engineer`和`Manager`同时定义将会引发一个错误:
+
+```python
+sqlalchemy.exc.ArgumentError: Column 'start_date' on class
+<class '__main__.Manager'> conflicts with existing
+column 'people.start_date'
+```
+
+```python
+from sqlalchemy.ext.declarative import declared_attr
+
+
+class Person(Base):
+    __tablename__ = 'people'
+    id = Column(Integer, primary_key=True)
+    discriminator = Column("type", String(50))
+    __mapper_args__ = {"polymorhpic_on": discriminator}
+
+
+class Engineer(Person):
+    __mapper_args__ = {'polymorhpic_identity': 'engineer'}
+
+    @declared_attr
+    def start_date(cls):
+        "Start date column, if not presen already"
+        return Person.__table__.c.get("start_date", Column(DateTime))
+
+
+class Manager(Person):
+    __mapper_args__ = {'polymorphic_identity': 'manager'}
+
+    @declared_attr
+    def start_date(cls):
+        "Start date column, if not present already."
+        return Person.__table__.c.get('start_date', Column(DateTime))
+```
+
+另外也可以使用mixin：
+
+```python
+class Person(Base):
+    __tablename__ = 'people'
+    id = Column(Integer, primary_key=True)
+    discriminator = Column('type', String(50))
+    __mapper_args__ = {'polymorphic_on': discriminator}
+
+class HasStartDate(object):
+    @declared_attr
+    def start_date(cls):
+        return cls.__table__.c.get('start_date', Column(DateTime))
+
+class Engineer(HasStartDate, Person):
+    __mapper_args__ = {'polymorphic_identity': 'engineer'}
+
+class Manager(HasStartDate, Person):
+    __mapper_args__ = {'polymorphic_identity': 'manager'}
+```
+
+### Concrete Table Inheritance
+
+需要在继承类中加入`concret=True`:
+
+```python
+class Person(Base):
+    __tablename__ = 'people'
+    id = Column(Integer, primary_key=True)
+    name = Column(String(50))
+
+class Engineer(Person):
+    __tablename__ = 'engineers'
+    __mapper_args__ = {'concrete':True}
+    id = Column(Integer, primary_key=True)
+    primary_language = Column(String(50))
+    name = Column(String(50))
+```
+
