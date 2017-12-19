@@ -768,3 +768,281 @@ class MyModel(MyMixin, Base):
     __tablename__ = 'atable'
     c = Column(Integer, primary_key=True)
 ```
+
+
+## Declarative API
+
+### API Reference
+
+- `sqlalchemy.ext.declarative.declarative_base(bind=None, metadata=None, mapper=None, cls=<type 'object'>, name='Base', constructor=<function__init__>, class_registry=None, metaclass=<class 'sqlalchemy.ext.declarative.api.DeclarativeMeta'>)`
+
+    构建一个declarative定义的基类。
+
+    新的类会给定一个metadata，它会生成适当的`Table`对象，根据类中定义的信息生成合适的`mapper()`对象。
+
+    参数:
+
+    - `bind`: 一个可选的`Connectable`，将会把这个bind参数赋值给MetaData实例
+
+    - `metadata`: 一个可选的`MetaData`实例。所以继承这个base的子类都会默认共享这个MetaData.如果没有传入实例这默认会生成一个新的MetaData实例。MetaData实例可以通过`.metadata`属性来访问。
+
+    - `mapper`: 一个可选的可调用对象，默认为`mapper()`.将用来映射子类和它的Table.
+
+    - `cls`: 默认为`object`.一个用于生成基类的类型。可以是一个类或者一个类元祖(多个类).
+
+    - `name`: 默认为`Base`.生成类的显示名称。多数情况自定义这个选项没什么意义，但是可以在调试和回溯时显得更加清晰。
+
+    - `constructor`: 默认为`_declarative_constructor()`.
+
+    - `class_registry`: 可选的字典，将会用来作为类名的registry.
+
+    - `metaclass`: 默认为`DeclarativeMeta`.
+
+
+- `sqlalchemy.ext.declarative.as_declarative(**kw)`
+
+    `declrative_base()`的类装饰器.
+
+    为发送到`declarative_base()`的`cls`提供了一个快捷方式，可以允许一个基类原地转换为declarative base:
+
+    ```python
+    from sqlalchemy.ext.declarative import as_declarative
+
+    
+    @as_declarative()
+    class Base(object):
+        @declared_attr
+        def __tablename__(cls):
+            return cls.__name__.lower()
+
+        id = Column(Integer, primary_key=True)
+
+
+    class MyMappedClass(Base):
+        # ...
+    ```
+
+    所有传入到`@as_declarative()`的关键字参数都将传入到`declarative_base()`中。
+
+
+- `sqlalchemy.ext.declarative.declared_attr(fget, cacading=False)`
+
+    基类： `sqlalchemy.orm.base._MappedAttribute, __builtin__.property`
+
+    标记一个类级别的方法，让它代表一个映射属性或者一个特殊的declarative成员名称.
+
+    可用于mixin:
+
+    ```python
+    class ProvidesUser(object):
+        """一个Mixin, 为类增加一个'user'关系 """
+
+        @declared_attr
+        def user(self):
+            return relationship('User')
+    ```
+
+    也可以用于映射类，比如提供一个"polymorphic"继承参数：
+
+    ```python
+    class Employee(Base):
+        id = Column(Integer, primary_key=True)
+        type = Column(String(50), nullable=False)
+
+        @declared_attr
+        def __tablename__(cls):
+            return cls.__name__.lower()
+
+        @declared_attr
+        def __mapper_args__(cls):
+            if cls.__name__ == 'Employee':
+                return {
+                    "polymorphic_on: cls.type,
+                    "polymorphic_identity": "Employee"
+                }
+            else:
+                return {"polymorphic_identity": cls.__name__}
+    ```
+
+    - `cascading`
+
+        标记一个`declared_attr`为cascading.
+
+        这是一个用于特殊情况的修饰符，它指出在一个mapped继承的场景下，一个column或者MapperProperty属性应该在每个子类中区分声明。
+
+        比如下面的例子中，MyClass和MySubClass都会建立一个单独的`id`列：
+
+        ```python
+        class HasIdMixin(object):
+            @declared_attr.cascading
+            def id(cls):
+                if has_inherited_table(cls):
+                    return Column(ForeignKey('myclass.id'), primary_key=True)
+                else:
+                    return Column(Integer, primary_key=True)
+
+
+        class MyClass(HasIdMixin Base):
+            __tablename__ = 'myclass'
+            # ...
+
+
+        class MySubClass(MyClass):
+            # ...
+        ```
+
+- `sqlalchemy.ext.declarative.api._declarative_constructor(self, **kwargs)`
+
+    一个简单的构造器，允许通过kwargs来初始化。
+
+    使用`kwargs`中的名称和值来构建实例的属性。
+
+    只有键名出现在实例的类的属性中才允许。可以是任何映射列或者关系。
+
+- `sqlalchemy.ext.declarative.has_inherited_table(cls)`
+
+    给定一个类，如果有任何类继承自这个类则返回True，否则返回False.
+
+
+- `sqlalchemy.ext.declarative.synonym_for(name, map_column=False)`
+
+    装饰器，让Python`property`可以查询一个同义词的列。
+
+    ```python
+    @synonym_for('col')
+    @property
+    def prop(self):
+        return "special sauce"
+    ```
+
+    常规的`synonym()`是这么用的:
+
+    `prop = synonym('col', descriptor=property(_read_prop, _write_prop))`
+
+- `sqlalchemy.ext.declarative.comparable_using(comparator_factory)`
+
+    装饰器，允许一个Python`property`可以用于查询标准（criteria）.
+
+    ```python
+    @comparable_using(MyComparatorType)
+    @property
+    def prop(self):
+        return "special sauce"
+    ```
+
+- `sqlalchemy.ext.declarative.instrument_declarative(cls, registry, metadata)`
+
+    给定一个类，让这个类declaratively, 使用给定的registry，可以是一个字典或者一个`MetaData`对象。
+
+- `sqlalchemy.ext.declarative.AbstractConcreteBase`
+
+    基类：`sqlalchemy.ext.declartive.api.ConcreteBase`
+
+    "concrete"声明式映射的helper类。
+
+    pass...
+
+- `sqlalchemy.ext.declarative.ConcreteBase`
+
+    "concrete"声明式映射的helper类。
+
+    pass...
+
+
+- `sqlalchemy.ext.declarative.DeferredReflection`
+
+    一个帮助类，用于映射构建的`deferred`反射步骤。
+
+    ```python
+    from sqlalchemy.ext.declarative import declarative_base
+    from sqlalchemy.ext.declarative import DeferredReflection
+    
+    Base = declarative_base()
+
+    class MyClass(DeferredReflection, Base):
+        __tablename__ = 'mytable'
+    ```
+
+    上面例子中, `MyClass`还没有被映射。在另外一系列的类都安装上面的风格被定义之后，所有的table都可以通过`prepare()`来映射：
+
+    ```python
+    engine = create_engine("someengine://...")
+    DeferredReflection.prepare(engine)
+    ```
+
+### Special Directives
+
+- `__declare_last__()`
+
+    这个钩子允许类级函数的定义中自动调用`MapperEvents.after_configured()`事件:
+
+    ```python
+    class MyClass(Base):
+        @classmethod
+        def __declare_last__(cls):
+            # ...
+            # do something with mappings
+    ```
+
+- `__declare_first__()`
+
+    很像`__declare_last__()`，但是它会在mapper配置前映射，通过事件`MapperEvents.before_configured()`.
+
+    ```python
+    class MyClass(Base):
+        @classmethod
+        def __declare_first__(cls):
+            # ...
+            # do something before mappings are configured
+    ```
+
+- `__abstract__`
+
+    `__abstract__`可以让这个类跳过table或mapper的生成过程。但是可用于继承或者Mixin：
+
+    ```python
+    class SomeAbstractBase(Base):
+        __abstract__ = True
+
+        def some_helpful_method(self):
+            # ...
+
+        @declared_attr
+        def __mapper_args__(cls):
+            return {"helpful mapper arguments": True}
+
+
+    class MyMappedClass(SomeAbstractBase):
+        # ...
+    ```
+
+    有一种使用`__abstract__`的场景是，不同的Base具有不同的MetaData:
+
+    ```python
+    Base = declarative_base()
+
+    class DefaultBase(Base):
+        __abstract__ = True
+        metadata = MetaData()
+
+
+    class OtherBase(Base):
+        __abstract__ = True
+        metadata = MetaData()
+    ```
+
+- `__table_cls__`
+
+    允许callable/class用来自定义Table的生成:
+
+    ```python
+    class MyMixin(object):
+        @classmethod
+        def __table_cls__(cls, name, metadata, *arg **kw):
+            return Table(
+                "my_" + name,
+                metadata, *arg, **kw
+            )
+    ```
+
+    
