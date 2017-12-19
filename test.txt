@@ -1,0 +1,4 @@
+obj = EmailLoginRecord(email_id=1)
+session = Session()
+session.add(obj)
+session.flush()

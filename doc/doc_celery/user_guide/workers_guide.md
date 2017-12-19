@@ -50,4 +50,49 @@ worker的shutdown应该符合`TERM`信号。
 
 ## Restarting the worker
 
-..
+想要重启woker，你需要发送`TERM`信号来开启一个新的实例。在开发时想要轻松的管理worker，可以使用`celery multi`:
+
+```python
+$ celery multi start 1 -A proj -l info -c4 --pidfile=/var/run/celery/%n.pid
+$ celery multi restart 1 --pidfile=/var/run/celery/%n.pid
+```
+
+至于生产环境，你可能需要一个进程监视系统.
+
+另外你可以通过`HUP`信号来重启一个worker。注意，这个方法让worker自己负责重启所以不推荐使用在生产环境:
+
+`$ kill -HUP $pid`
+
+## Process Signals
+
+worker主要靠覆盖如下的信号来处理进程：
+
+信号 | 功能
+-- | -- 
+TERM | 热关闭，等待所有的任务完成
+QUIT | 冷关闭，终结ASAP
+USR1 | 讲所有激活线程的traceback导出
+USR2 | 远程DEBUG
+
+
+## Variable in file paths
+
+文件路径参数`--logfile`, `--pidfile`以及`--statedb`可以包含变量:
+
+### Node name replacements
+
+- `%p`: 完整Node名称
+- `%h`: hostname, 包含domain名称
+- `%n`: 只包含hostname
+- `%d`: 只包含domain名称
+- `%i`: Prefork进程池索引，如果是主进程则索引为0
+- `%I`: 通过分隔符分割的Prefork进程池索引
+
+例如，如果当前的hostname为**george@foo.exmaple.com**:
+
+- `--logfile=%p.log` --> `george@foo.exmaple.com.log`
+- `--logfile=%h.log` --> `foo.example.com.log`
+- `--logfile=%n.log` --> `george.log`
+- `--logfile=%d` --> `example.com.log`
+
+
