@@ -1,9 +1,0 @@
-obj = EmailLoginRecord(email_id=1)
-session = Session()
-session.add(obj)
-session.flush()
-
-
-//cdn-n.luerzersarchive.com/archive/_cache/_1455375_5_3849d5da2cfc33b18224fa546ade1f87.jpg
-
-//cdn-n.luerzersarchive.com/archive/_cache/_1455375_5_0acfe12d6f0f7554df33a45f084a0e7e.jpg
