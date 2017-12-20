@@ -97,4 +97,89 @@ USR2 | 远程DEBUG
 
 ### Prefork pool process index
 
+prefork池进程索引说明符将会扩充到不同的文件中。
+
+可以让每个进程用一个单独的日志文件。
+
+记住这个文件数量将会保持和进程限制数量一样，不管后来进程退出或者自动伸缩。也就是说，是process index的数量，而不是进程计数或者pid.
+
+- `%i` - pool process index，如果是主进程则为0
+
+    比如,`-n worker1@example.com -c2 -f -%n-%i.log`将会生成三个日志文件：
+
+    - `worker1-0log`(主进程)
+    - `worker1-1log`(pool process 1)
+    - `worker1-2log`(pool process 2)
+
+- `%I`- pool process index，并且带有分隔符
+
+    比如,`-n worker1@example.com -c2 -f -%n%i.log`将会生成三个日志文件：
+
+    - `worker1.log`(main process)
+    - `worker1-1.log`(pool process 1) (`-`是分隔符)
+    - `worker1-2.log`(pool process 2)
+
+
+## Concurrency
+
+默认使用multiprocessing来并发执行任务，但是你也可以使用`Evenlet`.进程/线程的数量可以通过参数`--concurrency`, `-c`参数来指定，默认使用机器中的核心数量.
+
+> 进程数量(multiprocess/prefork pool)
+>
+>> 更多的pool proceesses通常会认为更好，但是增加pool proceesses的时候有一个分割点(cut-off point)，如果超出这个点之后继续增加process，性能反而会变遭.即使证明显示有时多个worker实例运行时，可能比单个worker的性能更好。你需要经验，经验可以帮助你找到最适合你的process数量，这个数量根据应用，工作负载，运行时长，以及其它的一些因素而不同。
+
+## Remote control
+
+-- | -- 
+-- | --
+pool | prefork, eventlet, gevent
+support | blocking:solo
+broker | amqp, redis
+support | 
+
+
+Worker可以通过使用高级的广播消息队列被远程控制。也就是说命令可以导向所有的worker，或者指定的worker列表.
+
+命令也可以有回复。客户端可以等待并收集这些回复。由于没有一个中心系统可以知道在cluster中有多少个可获取的worker，也就不能估算多少个worker可以发送回复，所以客户端可以设置一个timeout -- reply抵达时间的超时限制。这个timeout默认为1s.如果worker在达到timeout的时候也没有发送回复，可能是worker已亡，或者仅仅是网络延时。
+
+除了timeout，客户端可以指定要等待回复的最大数量。如果设定指定目标，这个限制就是目标hosts的数量。
+
+> 注意
+>
+>> `solo`池支持远程控制命名，但是任务执行时将会堵塞控制命令的执行，所以如果worker很忙的时候不要太频繁的使用控制命令。在这种情况下你也必须增加超时时间来等待worker的回复.
+
+### broadcast()函数
+
+这是一个客户端函数，用来发送消息给workers.一些远程控制的命令通常在后台使用`broadcast()`返程了一些高级接口，比如`rate_limit()`, `ping()`.
+
+发送`rate_limit`命令以及关键字参数:
+
+```python
+>>> app.control.broadcast('rate_limit',
+...                         arguments={'task_name': 'myapp.mytask',
+...                                    'rate_limit': '200/m'})
+```
+
+这个函数可以异步发送命令，不需要等待回复。想要请求回复，你需要使用`reply`参数：
+
+```python
+>>> app.control.broadcase('rate_limit', {
+...             'task_name': 'myapp.mytask', 'rate_limit': '200/m'}, reply=True)
+[{'worker1.example.com': 'New rate limit set successfully'},
+ {'worker2.example.com': 'New rate limit set successfully'},
+ {'worker3.example.com': 'New rate limit set successfully'}]
+})
+```
+
+使用`destination`参数你可以指定接受命令的workers列表：
+
+```python
+>>> app.control.broadcase('rate_limit', {
+...     'task_name': "myapp.mytask",
+...     'rate_limit': "200m"}, reply=True,
+...                            destination=['worker1@example.com'])
+[{'worker1.example.com': 'New rate limit set successfully'}]
+```
+
+使用高阶接口如`rate_limit`显然更加方便。但是有些命令只可以使用`broadcast()`.
 

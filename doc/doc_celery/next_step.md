@@ -517,7 +517,7 @@ $ celery -A proj worker -Q hipri,celery
 
 如果你有严格的调度要求，或者需要优化吞吐量，那么你需要阅读`Optimizing Guide`.
 
-如果你在使用RabbitMQ，那么你可以安装`librabbitmq`模块：这是一个C实现的AMQP客户端。
+如果你在使用RabbitMQ，那么你可以安装`librabbitmq`模块：这是一个C实现的AMQP客户端。
 
 `$ pip install librabbitmq`
 
