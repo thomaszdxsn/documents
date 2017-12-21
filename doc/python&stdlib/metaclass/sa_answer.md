@@ -378,4 +378,158 @@ class UpperAttrMetaClass(type):
     def __new__(upperattr_metaclass, future_class_name, 
                 future_class_parents, future_class_attr):
         uppercase_attr = {}
+        for name, val in future_class_attr.items():
+            if not name.startswith("__"):
+                uppercase_attr[name.upper()] = val
+            else:
+                uppsercase_attr[name] = val
+
+        return type.(upperattr_class, future_class_name,
+                        future_class_parents, uppercase_attr)
 ```
+
+但是这不够OOP。我们直接调用了`type`，我们并没有覆盖或调用父类的`__new__`:
+
+```python
+
+```class UpperAttrMetaclass(type): 
+
+    def __new__(upperattr_metaclass, future_class_name, 
+                future_class_parents, future_class_attr):
+
+        uppercase_attr = {}
+        for name, val in future_class_attr.items():
+            if not name.startswith('__'):
+                uppercase_attr[name.upper()] = val
+            else:
+                uppercase_attr[name] = val
+
+        # 重用了type.__new__()方法
+        # 这就是基础的OOP思想，没什么特殊的
+        return type.__new__(upperattr_metaclass, future_class_name, 
+                            future_class_parents, uppercase_attr)
+        # 或者可以这样写
+        # return super().__new__(upperattr_metaclass, future_class_name, 
+        #                 future_class_parents, uppercase_attr)
+```
+
+你可能主要到了，有一个额外的参数`upperattr_metaclass`。它本身没什么特殊的：`__new__`总是在第一个参数接受定义类的本身。就像一般方法的`self`，或者类方法的`cls`一样。
+(`__new__`其实是个`classmethod`，即使你定义时没有显式使用`@classmethod`来声明，它仍然会在内部将自己转换为一个`classmethod`)。
+
+当然，我在这里使用的命名主要是由于想要清晰地阐述，第一个参数可以随意取名，但是就像`self`一样，很多参数都有一个惯例。所以一个正在的产品级元类应该像这样：
+
+```python
+class UpperAttrMetaclass(type): 
+
+    def __new__(cls, clsname, bases, dct):
+
+        uppercase_attr = {}
+        for name, val in dct.items():
+            if not name.startswith('__'):
+                uppercase_attr[name.upper()] = val
+            else:
+                uppercase_attr[name] = val
+
+        return type.__new__(cls, clsname, bases, uppercase_attr)
+```
+
+我们可以使用`super()`让它开起来更加清晰，`super()`函数可以更加简单地实现继承：
+
+```python
+class UpperAttrMetaclass(type): 
+
+    def __new__(cls, clsname, bases, dct):
+
+        uppercase_attr = {}
+        for name, val in dct.items():
+            if not name.startswith('__'):
+                uppercase_attr[name.upper()] = val
+            else:
+                uppercase_attr[name] = val
+        
+        return super(UpperAttrMetaclass, cls).__new__(cls, clsname, bases, dct)
+```
+
+OK，关于元类没有更多的东西了。
+
+使用元类的代码看起来很复杂一般不是因为元类，是因为你使用元类来完成*根据观察改变对象*， *操纵继承*， *操纵变量，比如__dict__*,等等一些复杂的事情。
+
+事实上，元类特别适合用来做黑魔法(black magic)，因此也往往充满了复杂性。但是就元类本身而言，它很简单：
+
+- 拦截了类的创建
+- 修改类
+- 返回修改后的类
+
+### Why would you use metaclasses classes instead of functions?(为什么要用元类class代替元类function？)
+
+由于`__metaclass__`可以接受任何可调用对象，为什么要用一个看起来更加复杂的class当作元类呢？
+
+因为有以下若干原因：
+
+- 让目的清晰。当你阅读`UpperAttrMetaclass(type)`的时候，你就大概明白它是什么了。
+- 你可以使用OOP。元类可以继承元类，覆盖父类的方法。元类甚至可以使用元类。
+- 如果你指定一个元类class，它的子类都将是元类的实例，但是使用元类function的时候就不行。
+- 你可以把你的代码结构更加优化。你不可能只用元类做类似例子中的这点小事情。通常会使用它来做更加复杂的事情。能够在一个类中定义一组方法先让会让代码更加易读。
+- 你可以使用`__new__`, `__init__`和`__call__`这些钩子。它们可以让你做一些额外的事情。虽然大多数时候单独的使用`__new__`就够了，但总有一些家伙偏爱使用`__init__`.
+- 它原名就叫做元类(metaclass).总得让这个名字有点意义吧？
+
+### Why would you use metaclasses?
+
+现在问题来了，为什么你要使用这个容易导致bug的特性？
+
+好吧，大多数时候你不需要使用它：
+
+> 元类是一个高深的技巧，99%的用户并不需要明白它。如果你好奇自己需不需要使用元类，那么你就不需要(真正需要它的人明白需要它的地方，不需要解释为什么)
+>
+> -- Python专家Tim Peters
+
+使用元类的主要场景就是创建一个API。一个典型的例子就是Django ORM。
+
+它让你可以这样写代码：
+
+```python
+class Person(models.Model):
+    name = models.CharField(max_length=30)
+    age = models.IntegerField()
+```
+
+但是如果你这样写：
+
+```python
+guy = Person(name='bob', age='35')
+print(guy.age)
+```
+
+它并不会返回一个`IntegerField`对象给你。它会返回一个`int`，甚至可以将它从数据库中取回。
+
+这种代码可行是因为`models.Model`定义了`__metaclass__`，它会使用一些技巧让你定义的`Person`中的简单语句(`age = models.IntegerField()`)转换为一个数据库字典的复杂钩子(complex hook).
+
+Django通过元类让一个复杂的东西看起来很简单，并将它暴露成一个简单的API，在幕后会对这个API做的一些重建代码才重要。
+
+### The last word
+
+首先，你知道类即对象，类可以用来创建实例。
+
+好吧，类也是实例，元类的实例：
+
+```python
+>>> class Foo(object): pass
+>>> id(Foo)
+142630324
+```
+
+在Python中一切皆对象，它们都是类的实例或者元类的实例。
+
+除了`type`!
+
+`type`事实上是它自己的元类。在纯Python中你不可能再造出这么一个东西，它是在语言实现层创建的。
+
+其次，元类是复杂的。在一些简单的类修改上面不应该使用它们。你可以使用两个稍简单的技术来修改类：
+
+- monkey patch
+- class decorator
+
+在需要修改类的99%的情况下，你只需要上面两种方式就能修改。
+
+但是在98%的情况下，你并不需要修改类。
+

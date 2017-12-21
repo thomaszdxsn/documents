@@ -1,6 +1,6 @@
 ## 官网文档: string -- 普通的字符串操作
 
-### 字符串常量
+### String constants(字符串常量)
 
 在这个模块中定义的常量为：
 
@@ -40,7 +40,7 @@
 
     考虑为空白字符的ASCII字符串。这个字符串包含空格，tab，linefeed，return，formfeed，和vertical tab。
 
-### 自定义字符串格式化
+### Custom String Formatting(自定义字符串格式化)
 
 在`PEP3101`中，描述了内置的`str`类可以通过`.format()`方法实现复杂的变量替换(substitution)和value格式化.`string`模块的`Formatter`类允许你创建和定义自己的字符串格式化行为，它的实现方式和内置函数`format()`一样.
 
@@ -94,4 +94,27 @@
 
         通过给定的`conversion`类型(通过`parse()`方法返回的元组)， 转变value(值由`get_field()`返回).默认版本可以理解`'s'(str), 'r'(repr), 'a'(ascii)`这些转换类型.
 
-        
+
+### Format String Syntax(字符串格式化语法)
+
+TODO:
+
+#### Format Specification Mini-Language
+
+TODO:
+
+#### Format examples
+
+TODO:
+
+### Template strings
+
+`Template`实现了`PEP292`，提供了一种简单的字符串替换。除了常见的`%`替换方法，`Template`支持`$`替换，主要有以下的规则:
+
+- `$$`是一个转义字符，它会被替换为单个`$`.
+- `$identifier`pass
+
+## 参考
+
+- [PEP3101](TODO:)
+- [PEP292](TODO:)
