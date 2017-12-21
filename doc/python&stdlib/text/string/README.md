@@ -1,6 +1,6 @@
 无论在官方文档还是pyMOTW，`string`都是第一个介绍的标准库。如果是python老兵可能对这个库有很多回忆，因为很久之前，现在`str`中的大部分方法都是`string`库的独立函数.
 
-另外这个库引入了`format`语法，这种迷你DSL(Domain Specific Language)语言比C的`%`占位符无疑更加可读.
+另外这个库引入了`format`语法，这种迷你DSL(Domain Specific Language)语言比C的`%`占位符无疑更加可读.
 
 ## 参考
 
