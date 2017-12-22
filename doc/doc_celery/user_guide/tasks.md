@@ -258,7 +258,7 @@ worker可以自动为你记录日志，或者你也可以手动配置日志。
 ```python
 from celery.utils.log import get_task_logger
 
-logger = get_task_logger
+logger = get_task_logger(__name__)
 
 @app.task
 def add(x, y):
