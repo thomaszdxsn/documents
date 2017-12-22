@@ -183,3 +183,130 @@ Worker可以通过使用高级的广播消息队列被远程控制。也就是�
 
 使用高阶接口如`rate_limit`显然更加方便。但是有些命令只可以使用`broadcast()`.
 
+## Commands
+
+### revoke:Revoking tasks
+
+-- | --
+-- | --
+pool | all, terminate only support by prefork
+broker | amqp, redis
+command | celery -A proj control revoke <task_id>
+
+所有的worker node都保持了一份已撤销任务的id的内存，或者保存在内存中或者持久化到硬盘里.
+
+当一个worker接受到一个revoke情况，它会跳过任务的执行，但是除非在设置了terminate选项的前提下，它不会终止当前正在执行的任务。
+
+> 注意：
+>
+>> 当一个任务卡住后，terminate选项是管理员的最后一个手段。它不是终止任务，而是终止执行任务的进程。进程可能在信号发送的时候已经开始处理其它的任务，所以你不应该在程序上面调用这个terminate.
+
+如果设置了terminate，worker中处理任务的子进程将会被终结。默认发送的信号是TERM，但是你可以通过`signal`参数来另外指定。Signal可以是大写的名称或者任何定义于Python标准库`signal`模块的常量.
+
+terminate一个任务也意味着会revoke它.
+
+例子:
+
+```python
+>>> result.revoke()
+
+>>> AsyncResult(id).revoke()
+
+>>> app.control.revoke('d9078da5-9915-40a0-bfa1-392c7bde42ed')
+
+>>> app.control.revoke('d9078da5-9915-40a0-bfa1-392c7bde42ed',
+                       terminate=True)
+
+>>> app.control.revoke('d9078da5-9915-40a0-bfa1-392c7bde42ed',
+                       terminate=True, signal='SIGKILL')
+```
+
+### Revoking multiple tasks
+
+revoke方法同样接受列表参数，它会一次性撤销多个任务。
+
+例子:
+
+```python
+>>> app.control.revoke([
+...    '7993b0aa-1f0b-4780-9af0-c47c0858b3f2',
+...    'f565793e-b041-4b2b-9ca4-dca22762a55d',
+...    'd9d35e03-2997-42d0-a13e-64a66b88a618',    
+])
+```
+
+### Persistent revokes
+
+撤销任务是通过发送一个广播消息到所有的worker而生效的，然后worker会在内存中保持一份撤销任务的列表。当一个worker启动后，将会与cluster中的其它worker同步这份列表.
+
+撤销任务列表存储在内存中，所有一旦所有的worker都重启，那么这份列表就会销毁。如果你想要持久化这份列表，那么你需要对`celery worker`使用`--statedb`参数:
+
+`$ celery -A proj worker -l info --statedb=/var/run/celery/worker.state`
+
+或者如果你使用`celery multi`的时候想要为每个worker创建一个文件,那么你可以使用`%n`格式符：
+
+`$ celery multi start 2 -l info --statedb=/var/run/celery/%n.state`
+
+注意，远程控制命令当前只支持RabbitMQ和Redis.
+
+## Time Limits
+
+-- | --
+-- | --
+pool | prefork/gevent
+
+> Sort, or hard?
+>
+>> time limit有两种值,soft和hard。soft time limit可以允许任务被杀死前捕获一个任务并清除。hard time limit并不能缓存，它会强制终止任务.
+
+一个任务有可能永远的运行下去，比如你有些任务在等待一些永远不会发生的事件导致进入死循环。解决这个问题的最好办法就是设置time limit.
+
+time limit是定义一个任务可以运行的最大时长：
+
+```python
+from myapp import app
+from celery.exceptions import SoftTimeLimitExceeded
+
+
+@app.task
+def mytask():
+    try:
+        do_work()
+    except SoftTimeLimitExceeded:
+        clean_up_in_hurry()
+```
+
+### Changing time limits at run-time
+
+-- | --
+-- | --
+broker | amqp, redis
+
+有一个远程控制命令可以修改soft和hard的time limit.
+
+```python
+>>> app.control.time_limit('tasks.crawl_the_web',
+                    soft=60, hard=120, reply=True)
+[{'worker1.example.com': {'ok': 'time limits set successfully'}}]
+```
+
+## Rate Limits
+
+### Changing rate-limits at run-time
+
+下面是一个例子，修改`myapp.mytask`的rate-limit，让它每分钟只能运行最多２００个任务：
+
+```python
+>>> app.control.rate_limit('myapp.mytask', '200/m)
+```
+
+上面的例子并没有指定destination,所以会影响到cluster中的所有worker实例。如果你只想影响一个指定的worker列表，可以使用`destination`参数：
+
+```python
+>>> app.control.rate_limit('myapp.mytask', '200/m',
+...                         destination=['celery@worker1.example.com'])
+```
+
+## Max tasks per child setting
+
+pass
