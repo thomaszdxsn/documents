@@ -112,5 +112,73 @@ TODO:
 `Template`实现了`PEP292`，提供了一种简单的字符串替换。除了常见的`%`替换方法，`Template`支持`$`替换，主要有以下的规则:
 
 - `$$`是一个转义字符，它会被替换为单个`$`.
-- `$identifier`pass
+- `$identifier`是一个要替换的占位符名称，它会匹配一个映射键，所以叫做"identifier".默认情况下，“identifier”的命名规则和Python变量名一样，只可以下划线和ascii字符开头，整个名称只能包含下划线，ascii字符和数字。在`$`以后的第一个非identifier字符会指明这个占位符的结束位置。
+- `${identifier}`等同于`$identifier`。在占位符之后的字符是合法identifier的时候需要它，比如`${noun}ification`.
+
+字符串中任何其它形式的`$`都会导致异常`ValueError`.
+
+`string`模块提供了一个`Template`类，实现了这些规则。`Template`的方法包括:
+
+- class`string.Template(template)`     
+
+    构造器只接受一个参数，即模版字符串。
+
+    - `substitute(mapping, **kwds)`
+
+        执行模板替换，返回一个新的字符串。`mapping`可以是任何类字典对象，它的键代表模板中的占位符。另外，你也可以提供关键字参数，关键字即占位符。当mapping和`kwds`都传入并且发生重复的时候，将关键字参数优先使用。
+
+    - `safe_substitute(mapping, **kwds)`
+
+        和`substitute()`一样，除了在模板中的占位符没有出现对应的映射键时不会抛出`KeyError`错误，而是把原本的占位符文本原封不动的返回。另外，`$`的其它形式也不会抛出`ValueError`错误，而是保持为`$`的样子。
+
+        其它的异常仍然会抛出。这个方法之所以叫做“safe”，是因为这个方法总是试图返回一个字符串而不是抛出错误。但是从另一个角度来说，`safe_substitute()`也可以说并不“safe”，因为在发生代码编写错误，映射不对的时候它也不会报错。
+
+    `Template`实例同样提供了一个公共数据属性：
+
+    - `template`
+
+        这是传入到构造器的`template`参数。大部分情况下，你不应该改变它。但是你要改的话也是可以的。
+
+
+下面是使用`Template`的一个例子：
+
+```pyhton
+>>> from string import Template
+>>> s = Template('$who likes $what')
+>>> s.substitute(who='tim', what='kung pao')
+'tim likes kung pao'
+>>> d = dict(who='tim')
+>>> Template('Give $who $100').substitute(d)        #! 因为$后面非正规的identify，将会抛出ValueError
+Traceback (most recent call last):
+...
+ValueError: Invalid placeholder in string: line 1, col 11   
+>>> Template('$who like $what').substitute(d)       #! 因为有一个占位符没有填充，所以会抛出KeyError
+Traceback (most recent call last):
+...
+KeyError: 'what'
+>>> Template('$who likes $what').safe_substitute(d)
+'time likes $what'
+```
+
+**高级用法**：你可以继承`Template`，自定义你的占位符语法，delimiter字符，或者用于解析模版字符串的整个正则表达式。如果想达到这些目的，你需要覆盖这些类属性：
+
+- `delimiter`
+
+    这是一个字符串，描述一个**占位符引入delimiter**.默认的值是`$`.注意这个值不是正则表达式，实现层会对这个值调用`re.escape()`。
+
+- `idpattern`
+
+    这是一个正则表达式，描述非括号类型占位符的pattern(括号会以合适的方式自动加上)。默认值是一个正则表达式`[_a-z][_a-z0-9]*`.
+
+- `flags`
+
+    这个属性代表正则表达式标识，将会在正则表达式编译时用到。默认值是`re.INGORECASE`.注意`re.VERBOSE`总是会被加入到标识中，所以自定义的正则表达式必须遵循使用verbose正则表达式的习惯.
+
+另外，你可以通过覆盖类属性`pattern`来提供一个完整的正则表达式.如果你覆盖你这个属性，必须提供一个包含4个具名捕获组的正则表达式:
+
+- `escaped`: 
+
+    
+
+    
 
