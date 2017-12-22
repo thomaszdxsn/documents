@@ -114,7 +114,3 @@ TODO:
 - `$$`是一个转义字符，它会被替换为单个`$`.
 - `$identifier`pass
 
-## 参考
-
-- [PEP3101](TODO:)
-- [PEP292](TODO:)
