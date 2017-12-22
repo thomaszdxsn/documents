@@ -309,4 +309,57 @@ broker | amqp, redis
 
 ## Max tasks per child setting
 
-pass
+-- | --
+-- | --
+pool | prefork
+
+用这个option，你可以设置一个worker可执行的最大任务数量。
+
+在你有内存泄漏的问题是这个配置很有用。
+
+这个option可以通过worker的命令参数`--max-tasks-per-child`来设定，或者直接使用`worker_max_tasks_per_child`设置。
+
+## Max memory per child setting
+
+你可以选择设置一个worker中常驻内存的最大值。
+
+在你有内存泄漏的问题是这个配置很有用。
+
+这个option可以通过worker的命令参数`--max-memory-per-child`来设定，或者直接使用`worker_max_memory_per_child`设置。
+
+## Autoscaling
+
+-- | --
+-- | --
+pool | prefork,gevent
+
+autoscaler组件可以依据负载动态地调整pool的大小。
+
+- 在有很多事情要做的时候，autoscaler会自动增加新的pool process
+- 在负载很低的时候，autoscaler会自动移除process
+
+可以通过选项`--autoscale`来激活，这个选项需要两个值：pool的最大值和最小值：
+
+```python
+--autoscale=AUTOSCALE
+    Enable autoscaling by providing
+    max_concurrency,min_concurrency. Example:
+        --autoscale=10,3(always keep 3 processes, but grow to 10 if necessary).
+```
+
+你可以通过继承`Autoscaler`来设定自己的autoscaler规则。一些好的经验是将可用的内存平分。
+
+## Queues
+
+一个worker实例可以从任意数量的队列中消费。默认它会消费定义在`task_queues`设置中的所有队列(如果没有指定，将会使用默认队列`celery`).
+
+你可以在开启阶段指定从哪个队列消费，通过为`Q`选项传入以逗号分隔的队列名称即可：
+
+`$ celery -A proj worker -l info -Q foo,bar,baz`
+
+你同样可以在运行时使用远程控制命令开启和停止对一个队列的消费：`add_consumer`和`cancel_consumer`.
+
+### Queues: Adding consumers
+
+`add_consumer`控制命令可以让一个或多个worker来开启对一个队列的消费。这个操作是幂等的。
+

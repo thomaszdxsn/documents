@@ -135,4 +135,4 @@ class MyDataClass(Base):
 
 #### Supporting Picking
 
-pass
+`sqlalchemy.ext.mutable`扩展依赖`weakref.WeakKeyDictionary`
