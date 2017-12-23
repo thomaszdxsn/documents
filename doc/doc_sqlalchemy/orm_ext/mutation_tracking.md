@@ -135,4 +135,128 @@ class MyDataClass(Base):
 
 #### Supporting Picking
 
-`sqlalchemy.ext.mutable`扩展依赖`weakref.WeakKeyDictionary`
+pass...
+
+#### Receiving Events
+
+`AttributeEvents.modified()`事件handler可以在mutable scalar发出修改事件时接受到这个事件。这个事件handler在`attribute.flag_modified()`函数被mutable扩展调用后被调用：
+
+```python
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import event
+
+Base = declarative_base()
+
+
+class MyDataClass(Base):
+    __talbename__ = 'my_data'
+
+    id = Column(Integer, primary_key=True)
+    data = Column(MutableDict.as_mutable(JSONEncodedDict))
+
+
+@event.listens_for(MyDataClass.data, 'modified')
+def modified_json(instance):
+    print('json value modified: ', instance.data)
+```
+
+### Establishing Mutability on Composites
+
+composite是一个特殊的ORM特性可以允许一个scalar属性代表一个或多个列的混合对象。
+
+pass...
+
+```python
+from sqlalchemy.ext.mutalbe import MutableComposite
+
+
+class Point(MutableComposite):
+    def __init__(self, x, y):
+        self.x = x 
+        self.y = y
+
+    def __setattr__(self, key, value):
+        """拦截set事件"""
+        
+        # 设置属性
+        object.__setattr__(self, key, value)
+
+        # 警告所有父类这个对象修改了
+        self.changed()
+
+    def __composite_values__(self):
+        return self.x, self.y
+
+    def __eq__(self, other):
+        return isinstance(other, Point) and \
+                other.x == self.x and \
+                other.y == self.y
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+```
+
+`MutableComposite`类可以利用Python元类来自动建立监听。下面例子中，当`Point`映射到`Vertext`类时，将会对`Point`对象的`Vertex.start`和`Vertex.end`都建立改动监听：
+
+```python
+from sqlalchemy.orm import composite, mapper
+from sqlalchemy import Table, Column
+
+
+vertices = Table('vertices', metadata,
+            Column('id', Integer, primary_key=True),
+            Column('x1', Integer),
+            Column('y1', Integer),
+            Column('x2', Integer),
+            Column('y2', Integer))
+
+
+class Vertex(object):
+    pass
+
+
+mapper(Vertex, vertices, properties={
+    'start': composite(Point, vertices.c.x1, vertices.c.y1),
+    "end": composite(Point, vertices.c.x2, vertices.c.y2)
+})
+```
+
+任何对`Vertex.start`或者`Vertex.end`都修改都会对父对象属性标记为"dirty":
+
+```python
+>>> from sqlalchemy.orm import Session
+
+>>> session = Session()
+>>> v1 = Vertext(start=Point(3, 4), end=Point(12, 15))
+>>> session.add(v1)
+>>> sessopm.commit()
+
+>>> v1.end.x = 8
+>>> assert v1 in session.dirty
+True
+```
+
+#### Coercing Mutable Composites
+
+`MutableBase.coerce()`方法也支持混合类型。
+
+```python
+class Point(MutableComposite):
+    # other Point methods
+    # ...
+
+    def coerce(cls, key, value):
+        if isinstance(value, tuple):
+            value = Point(*value)
+        elif not isinstance(value, Point):
+            raise ValueError('tuple or Point expected')
+        return value
+```
+
+#### Supporting Pickling
+
+pass...
+
+### API Reference
+
+pass
