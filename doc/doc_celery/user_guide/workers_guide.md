@@ -363,3 +363,349 @@ autoscaler组件可以依据负载动态地调整pool的大小。
 
 `add_consumer`控制命令可以让一个或多个worker来开启对一个队列的消费。这个操作是幂等的。
 
+想要让cluster的所有worker都开始消费队列`foo`你可以输入这样的命令:
+
+```python
+$ celery -A proj control add_consumer foo
+-> worker1.local: OK
+    started consuming from u'foo'
+```
+
+如果你想指定一个特定的worker，你可以使用`--destination`参数:
+
+`$celery -A proj control add_consumer foo -d celery@worker1.local`
+
+同样的事情可以通过程序代码来完成：
+
+```python
+>>> app.control.add_consumer('foo', reply=True)
+[{u'worker1.local': {u'ok': u"already consuming from u'foo'"}}]
+
+>>> app.control.add_consumer('foo', reply=True,
+...                          destination=['worker1@example.com'])
+[{u'worker1.local': {u'ok': u"already consuming from u'foo'"}}]
+```
+
+### Queues: Canceling consumers
+
+你可以使用命令`cancel_comsumer`来取消对一个队列的消费.
+
+想要让cluster所有worker取消对一个队列的消费：
+
+```python
+$ celery -A proj control cancel_consumer foo
+```
+
+`--destination`参数可以指定要取消的worker：
+
+```python
+$ celery -A proj control cancel_consumer foo -d celery@worker1.local
+```
+
+可以在程序中取消:
+
+```python
+>>> app.control.cancen_consumer('foo', reply=True)
+[{u'worker1.local': {u'ok': u"no longer consuming from u'foo'"}}]
+```
+
+### Queues: List of active queues
+
+你可以使用命令`active_queues`，列出worker消费的队列清单：
+
+```python
+$ celery -A proj inspect active_queues
+[...]
+```
+
+就像其它远程控制命令一样，它也支持`--destination`参数：
+
+```python
+$ celery -A proj inspect active_queues -d celery@worker1.local
+[...]
+```
+
+当然也可以在程序中实现：
+
+```python
+>>> app.control.inspect().active_queues()
+[...]
+
+>>> app.control.inspect(['worker1.local']).active_queues()
+[...]
+```
+
+## Inspecting workers
+
+`app.control.insepect`可以让你观察运行中的worker。它会在幕后运行远程控制命令。
+
+这个库的接口和`celery`命令一样:
+
+```python
+>>> # Inspect all nodes.
+>>> i = app.control.inspect()
+
+>>> # Specify multiple node to inspect.
+>>> i = app.control.inspect(['worker1.example.com',
+                            'worker2.example.com'])
+
+>>> # Specify a single node to inspect.
+>>> i = app.control.inspect('worker1.example.com')
+```
+
+### Dump of registered tasks
+
+你可以使用`registered()`获取worker中所有已注册的任务：
+
+```python
+>>> i.registered()
+[{'worker1.example.com': ['tasks.add',
+                          'tasks.sleeptask']}]
+```
+
+### Dump of currently executing tasks
+
+你可以使用`active()`获取所有已激活的任务:
+
+```python
+>>> i.active()
+[{'worker1.example.com':
+    [{'name': 'tasks.sleeptask',
+      'id': '32666e9b-809c-41fa-8e93-5ae0c80afbbf',
+      'args': '(8,)',
+      'kwargs': '{}'}]}]
+```
+
+### Dump of scheduled(ETA) tasks
+
+你可以通过使用`scheduled()`，获取所有等待规划的任务:
+
+```python
+>>> i.scheduled()
+[{'worker1.example.com':
+    [{'eta': '2010-06-07 09:07:52', 'priority': 0,
+      'request': {
+        'name': 'tasks.sleeptask',
+        'id': '1a7980ea-8b19-413e-91d2-0b74f3844c4d',
+        'args': '[1]',
+        'kwargs': '{}'}},
+     {'eta': '2010-06-07 09:07:53', 'priority': 0,
+      'request': {
+        'name': 'tasks.sleeptask',
+        'id': '49661b9a-aa22-4120-94b7-9ee8031d219d',
+        'args': '[2]',
+        'kwargs': '{}'}}]}]
+```
+
+这些任务是带有ETA/countdown参数的任务，而不是周期性任务.
+
+### Dump of reserved tasks
+
+Reserved任务是指已经收到任务消息，但是等待执行的任务。
+
+你可以使用`reserved()`获取reserved任务清单:
+
+```python
+>>> i.reserved()
+[{'worker1.example.com':
+    [{'name': 'tasks.sleeptask',
+      'id': '32666e9b-809c-41fa-8e93-5ae0c80afbbf',
+      'args': '(8,)',
+      'kwargs': '{}'}]}]
+```
+
+## Statitics
+
+远程控制命令`inspect stats`或者`stats()`函数可以报告一个worker的数据统计信息：
+
+```python
+$ celery -A prok inspect stats
+```
+
+输出包含如下字段：
+
+- broker
+
+    broker统计信息
+
+    - connect_timeout
+
+        建立一个新链接的超时时间(单位：秒)
+
+    - heartbeat
+
+        当前的heartbeat值(通过客户端设定)
+
+    - insist
+
+        不再使用
+
+    - login_method
+
+        用来连接broker的登录方法
+
+    - port
+
+        远程broker的端口
+
+    - ssl
+
+        是否开启SSL
+
+    - transport
+
+        使用的transport名称(比如`amqp`或者`redis`)
+
+    - transport_options
+
+        传入transport的选项
+
+    - uri_prefix
+
+        transport的hostname，比如:
+
+        `redis+socket:///tmp/redis.sock`
+
+        在这个例子中，URI-prefix是redis
+
+    - userid
+
+        用于连接broker的id
+
+    - virtual_host
+
+        使用的虚拟host
+
+- clock
+
+    workers的逻辑时钟(logical clock)值。这个值是一个正整数，并且应该会递增。
+
+- pid
+
+    workers实例的进程id(主进程)
+
+- pool
+
+    pool统计信息。
+
+    - max-concurrency
+
+        processes/threads/green threads的最大值
+
+    - max-tasks-per-child
+
+        一个线程在回收钱执行的最大任务数量.
+
+    - processes
+
+        PID(或者线程ID)列表
+
+    - put-guarded-by-semaphore
+
+        内部使用
+
+    - timeouts
+
+        默认的time limits值
+
+    - writes
+
+- prefetch_count
+
+    task消费者当前的prefetch count值.
+
+- rusage
+
+    系统使用的统计信息。这个字段根据你的平台而不同。
+
+    - stime
+
+        你进程中操作系统代码花费的时间。
+
+    - maxres
+
+        进程使用的最大resident大小
+
+    - idrss
+
+        数据使用的非共享(non-shared)内存总量
+
+    - ixrss
+
+        和其它进程共享的内存总量
+
+    - inblock
+
+        对文件系统进行IO操作话费的总时间
+
+    - majflt
+
+    - minflt
+
+    - msgnd
+
+    - nvcsw
+
+    - nivcsw
+
+    - nsignals
+
+    - nswap
+
+- total
+
+    自从启动后接受到所有任务的映射。
+
+
+## Additional Commands
+
+### Remote shutdown
+
+这个命令可以温柔的远程关闭worker:
+
+```python
+>>> app.control.broadcast('shutdown')
+>>> app.control.broadcast('shutdown', destination='worker1@example.com')
+```
+
+### Ping
+
+这个命令对存活的worker请求一次ping。worker将会回复字符串`pong`，默认为这个ping指令设定了1秒的超时时间:
+
+```python
+>>> app.control.ping(timeout=0.5)
+[{'worker1.example.com': 'pong'},
+ {'worker2.example.com': 'pong'},
+ {'worker3.example.com': 'pong'}]
+```
+
+`ping()`也支持`destination`参数：
+
+```python
+>>> ping(['worker2.example.com', 'worker3.example.com'])
+[{'worker2.example.com': 'pong'},
+ {'worker3.example.com': 'pong'}]
+```
+
+### Enable/disable events
+
+你可以通过`enable_events`, `disable_events`命令来激活/禁用事件。
+
+```python
+>>> app.control.enable_events()
+>>> app.control.disable_events()
+```
+
+## Writing your own remote control commands
+
+有两种类型的远程控制命令：
+
+- inspect命令
+
+    没有副作用，通常返回一些worker中发现的值，比如当前注册的任务，已激活任务的清单
+
+- control命令
+
+    可以有副作用，比如增加一个消费队列。
+
+...pass
