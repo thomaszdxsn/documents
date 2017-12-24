@@ -139,3 +139,6 @@ class Template(metaclass=_TemplateMetaclass):
             raise ValueError('Unrecognized named group in pattern',
                              self.pattern)
         return self.pattern.sub(convert, self.template)
+
+    def safe_substitute(*args, **kws):
+        pass
