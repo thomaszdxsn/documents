@@ -19,7 +19,7 @@ __all__ = ['ascii_letters', 'ascii_lowercase', 'ascii_uppercase', 'capwords',
            'whitespace', 'Formatter', 'Template']
 
 
-import _string      # 旧的string模块?
+import _string      # string的helper模块
 
 # 一些ctype风格的字符分类字符串
 whitespace = ' \t\n\r\v\f'
@@ -48,7 +48,7 @@ def capwords(s, sep=None):
     return (sep or ' ').join(x.captalize() for x in s.split(sep))
 
 
-####################################################################
+########################################################################
 import re as _re
 from collections import ChainMap as _ChainMap
 
@@ -187,3 +187,15 @@ class Template(metaclass=_TemplateMetaclass):
                              self.pattern)
         return self.pattern.sub(convert, self.template)
 
+
+########################################################################
+# Formatter类
+# 请看PEP 3101对这个类的提案和细节
+
+# 最难的一部分是C扩展的重用。
+# 暴露了一个"_"前缀方法供str使用
+
+# 总体的parser实现于 _string.formatter_parser
+# field name parser 实现于 _string.formatter_field_name_split
+
+# TODO: 先看完文档和PEP

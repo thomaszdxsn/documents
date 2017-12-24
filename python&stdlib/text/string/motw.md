@@ -26,7 +26,6 @@ The quick brown fox jumped over the lazy dog.
 The Quick Brown Fox Jumped Over The Lazy Dog.
 ```
 
-
 ### Constant(常量)
 
 `string`模块包含一组关于ASCII字符和数字字符集的常量.
@@ -280,4 +279,8 @@ SUBSTITUTED:
 {{
 replacement
 ```
+
+### Formatter
+
+`Formatter`类实现了一种DSL，和`str.format()`方法一样。它包含**类型转换**，**赋值**，**属性和字段引用**，**命名和位置模版参数**， **指定类型的格式化选项**这些特性.大多数时候，使用`str.format()`是一个更加方便的接口，不过`Formatter`提供给大家，是为了在某些特殊情况下可以继承它来改变一些东西。
 

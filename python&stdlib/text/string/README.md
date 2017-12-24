@@ -19,7 +19,7 @@
 让出来供关键字参数使用.
 2. `re.sub()`可以接受函数作为第一个参数，这样使用明显更加弹性化.
 
-`Formatter`重不重要？重要，但是多数时候并不需要`import string`。
+`Formatter`重不重要？重要，但是多数时候并不需要`import string`，使用`str.method()`这个接口即可。
 
 ## 参考
 
@@ -31,7 +31,7 @@
 
 - [PEP292 - 简单的字符串替换](https://www.python.org/dev/peps/pep-0292)
 
-- [PEP3103 - 高级字符串格式化](https://www.python.org/dev/peps/pep-3103)
+- [PEP3101 - 高级字符串格式化](https://www.python.org/dev/peps/pep-3101)
 
 - [格式化字符串语法 - `Formatter`和`str.format()`的DSL语言](https://docs.python.org/3.5/library/string.html#format-string-syntax)
 
