@@ -2,6 +2,25 @@
 
 另外这个库引入了`format`语法，这种迷你DSL(Domain Specific Language)语言比C的`%`占位符无疑更加可读.
 
+## 摘要
+
+首先，`string`模块现在对使用者的意义几乎只剩**常量**部分.
+
+`Template`在Python历史上面昙花一现，它标榜自己相比Ｃ的%插值"simpler(更简单)"，
+但是“更简单”还不够，C语言的插值语法已经深入人心，而且大多数人都学过并掌握，所以也没有学习成本.
+
+学习`Template`一部分最有用的是通过看它的源码，我又去学了一遍`metaclass`，这次大概理解了元类
+6-7成的样子。另外这个`Template`源码基本就是通过正则实现的，使用的正则方法包括`re.escape()`,
+`re.sub()`...
+
+`Template`源码中有两个重要的细节:
+
+1. `substitute(*args, **kwargs)`方法把`self`包含到了`*args`中，所以可以将`self`这个名称
+让出来供关键字参数使用.
+2. `re.sub()`可以接受函数作为第一个参数，这样使用明显更加弹性化.
+
+`Formatter`重不重要？重要，但是多数时候并不需要`import string`。
+
 ## 参考
 
 - [string库的官方文档](https://docs.python.org/3.5/library/string.html)
