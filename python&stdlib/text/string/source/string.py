@@ -19,7 +19,7 @@ __all__ = ['ascii_letters', 'ascii_lowercase', 'ascii_uppercase', 'capwords',
            'whitespace', 'Formatter', 'Template']
 
 
-import _string      # string的helper模块
+import _string      # string的helper模块   #TODO: 阅读这个模块
 
 # 一些ctype风格的字符分类字符串
 whitespace = ' \t\n\r\v\f'
