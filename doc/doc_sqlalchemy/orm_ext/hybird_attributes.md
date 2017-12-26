@@ -40,3 +40,13 @@ class Inteval(Base):
     def intersects(self, other):
         return self.contains(other.start) | self.contains(other.end)
 ```
+
+上面例子中，`length`属性将会返回`end`和`start`属性之间的差异。在`Interval`实例中，减法在Python中进行，使用普通的Python描述符机制：
+
+```python
+>>> i1 = Interval(5, 10)
+>>> i1.length
+5
+```
+
+pass
