@@ -36,7 +36,7 @@ def search_for_user(session, username, email=None):
     if email:
         baked_query += lambda q: q.filter(User.email == bindparam('email'))
 
-    result = baked_query(session).params(username, email=email).all()
+    result = baked_query(session).params(username=username, email=email).all()
 ```
 
 上面代码有以下值得注意的点：
