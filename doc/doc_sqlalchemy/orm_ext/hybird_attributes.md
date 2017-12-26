@@ -294,4 +294,502 @@ WHERE account.balance <  :balance_1 OR account.balance IS NULL
 
 #### Correlated Subquery Relationship Hybird
 
-pass 
+我们当然也可以使用correlated subquery.correlated subquery可移植性更好，但是在SQL层面的效率相比稍差。我们可以使用这个技术来计算所有账号的余额:
+
+```python
+from sqlalchemy import Column, Integer, ForeignKey, Numeric, String
+from sqlalchemy.orm import relationship
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.ext.hybird import hybird_property
+from sqlalchemy import select, func
+
+Base = declarative_base()
+
+
+class SavingsAccount(Base):
+    __tablename__ = 'account'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('user.id'), nullable=False)
+    balance = Column(Numeric(15, 5))
+
+
+class User(Base):
+    __tablename__ = 'user'
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100), nullable=False)
+
+    accounts = relationship('SavingsAccount', backref='owner')
+
+    @hybird_property
+    def balance(self):
+        return sum(acc.balance for acc in self.accounts)
+
+    @balance.expression
+    def balance(cls):
+        return select([func.sum(SavingsAccount.balance)]).\
+                where(SavingsAccount.user_id == cls.id).\
+                label('total_balance')
+```
+
+上面的例子将会让balance生成这样一个SQL:
+
+```python
+>>> print s.query(User).filter(User.balance > 400)
+SELECT "user".id AS user_id, "user".name AS user_name
+FROM "user"
+WHERE (SELECT sum(account.balance) AS sum_1
+FROM account
+WHERE account.user_id = "user".id) > :param_1
+```
+
+### Building Custom Comparators
+
+hybird属性包含一个helper，可以用于创建自定义比较符：
+
+`hybird_property.comparator()`装饰器和`hybird_property.expression`不能一起使用。
+
+下面例子允许属性不区分大小写地比较:
+
+```python
+from sqlalchemy.ext.hybird import Comparator, hybird_property
+from sqlalchemy import func, Column, Integer, String
+from sqlalchemy.orm import Session
+from sqlalchemy.ext.declarative import declarative_base
+
+Base = declarative_base()
+
+
+class CaseInsensitiveComparator(Compartor):
+    def __eq__(self, other):
+        return func.lower(self.__clause_element__()) == func.lower(other)
+
+
+class SearchWord(Base):
+    __tablename__ = 'searchword'
+    id = Column(Integer, primary_key=True)
+    word = Column(String(255), nullable=False)
+
+    @hybird_property
+    def word_insensitive(self):
+        return self.word.lower()
+
+    @word_insensitive.compartor
+    def word_insensitive(cls):
+        return CaseInsensitiveComparator(cls.word)
+```
+
+上面例子中，`word_insensitive`的SQL形态将会对它使用`LOWER()`这个SQL函数:
+
+```python
+>>> print(Session().query(SearchWord).filter_by(word_insensitive='Trucks'))
+SELECT searchword.id AS searchword_id, searchword.word AS searchword_word
+FROM searchword
+WHERE lower(searchword.word) = lower(:lower_1)
+```
+
+`CaseInsensitiveComparator`实现了`ColumnOperators`的部分接口。可以在`Comparator.operate`方法中，将任意的比较操作使用"类型转换"操作:
+
+```python
+class CaseInsensitiveCompartor(Comparator):
+    def operate(self, op, other):
+        return op(func.lower(self.__cluase_element__()), func.lower(other))
+```
+
+### Reusing Hybird Properties across Subclasses
+
+hybird可以继承自父类，可以在子类中重写`hybird_property.getter()`, `hybird_property.setter()`.这和Python中的`@property`类似:
+
+```python
+class FirstNameOnly(Base):
+    # ...
+    first_name = Column(String)
+
+    @hybird_property
+    def name(self):
+        return self.first_name
+
+    @name.setter
+    def name(self, value):
+        self.first_name = value
+
+
+class FirstNameLastName(FirstNameOnly):
+    # ...
+    last_name = Column(String)
+
+    @FirstNameOnly.name.getter
+    def name(self):
+        return self.first_name + ' ' + self.last_name
+
+    @name.setter
+    def name(self, value):
+        self.firstname, self.lastname = value.split(' ', 1)
+```
+
+上面例子中，`FirstNameLastName`引用了`FirstNameOnly`中的hybird，将它作为自己的getter和setter.
+
+在覆盖`hybird_property.expression()`和`hybird_property.comparator()`时，需要使用`hybird_property.overrides`，否则会发生冲突的问题：
+
+```python
+class FirstNameLastName(FirstNameOnly):
+    # ...
+
+    last_name = Column(String)
+
+    @FirstNameOnly.overrides.expression
+    def name(cls):
+        return func.concat(cls.first_name, ' ', last_name)
+```
+
+### Hybird Value Objects
+
+注意在我们上一个例子中，如果我们将`SearchWord`实例的`.word_insensitive`属性和普通的Python字符串比较时，字符串并不会自动的变为小写。`@word_insensitive.compartor`只作用于SQL端。
+
+自定义比较符的一个稍复杂形态叫做`Hybird Value Object`.这个技术可以同样应用到实例端和SQL表达式一端。让我们讲之前例子中的`CaseInsensitiveComparator`类换成`CaseInsensitiveWord`:
+
+```python
+class CaseInsensitiveWord(Comparator):
+    """Hybird value object representign a lower case representation of a word."""
+
+    def __init__(self, word):
+        if isinstance(word, basestring):
+            self.word = word.lower()
+        elif isinstance(word, CaseInsensitiveWord):
+            self.word = word.word
+        else:
+            self.word = func.lower(word)
+
+    def operator(self, op, other):
+        if not isinstance(other, CaseInsensitiveWord):
+            other = CaseInsensitiveWord(other)
+        return op(self.word, other.word)
+
+    def __clause_element__(self):
+        return self.word
+
+    def __str__(self):
+        return self.word
+
+    key = 'word'
+    # 'Label to apply to Query tuple results'(query结果的label)
+```
+
+上面例子中，`CaseInsensitiveWord`对象的`self.word`，可能是一个SQL函数，或者原生Python对象.通过覆盖`operate()`和`__cluase_elment__()`都是为了`self.word`，让所有比较操作都针对了转换后的`self.word`:
+
+```python
+class SearchWord(Base):
+    __tablename__ = 'searchword'
+    id = Column(Integer, primary_key=True)
+    word = Column(String(255), nullable=False)
+    
+    @hybird_property
+    def word_insensitive(self):
+        return CaseInsensitiveWord(self.word)
+```
+
+现在`.word_insensitive`属性可以通用级别忽略大小写，包含SQL表达式和Python表达式:
+
+```python
+>>> print(Session().query(SearchWord).filter_by(word_insensitive='Trucks'))
+SELECT searchword.id AS searchword_id, searchword.word AS searchword_word
+FROM searchword
+WHERE lower(searchword.word) = :lower_1
+```
+SQL表达式　比较　SQL表达式：
+
+```python
+>>> sw1 = aliased(SearchWord)
+>>> sw2 = aliased(SearchWord)
+>>> printSession().query(
+...     sw1.word_insensitive,
+...     sw2.word_insensitive).\
+...         filter(
+...             sw1.word_insensitive > sw2.word_insensitive    
+...         )    
+SELECT lower(searchword_1.word) AS lower_1,
+lower(searchword_2.word) AS lower_2
+FROM searchword AS searchword_1, searchword AS searchword_2
+WHERE lower(searchword_1.word) > lower(searchword_2.word)
+```
+
+Python表达式:
+
+```python
+>>> ws1 = SearchWord(word='SomeWord')
+>>> ws1.word_insensitive == 's0mEw0rD'
+True
+>>> ws1.word.insensitive == 'X0mEw0rX'
+False
+>>> print(ws1.word_insensitive)
+someword
+```
+
+**Hybird Value**模式在面对**值具有多种表现形式**的场景时非常有用，比如时间戳，时间delta，度量单位，货币以及加密密码.
+
+### Building Transformers
+
+*transformer*是一个对象，它可以接受一个Query对象并返回一个新的Query对象。这个`Query`对象包含一个方法`with_transformation()`，它返回通过函数变形后新的一个`QUery`.
+
+我们可以将它和`Compartor`组合起来。
+
+考虑一个映射类`Node`,它使用adjacency模式组装成一个树结构:
+
+```python
+from sqlalchemy import Column, Integer, Foreignkey
+from sqlalchemy.orm import relationship
+from sqlalchemy.ext.declarative import declarative_base
+
+Base = declarative_base()
+
+
+class Node(Base):
+    __tablename__ = 'node'
+    id = Column(Integer, primary_key=True)
+    parent_id = Column(Integer, ForeignKey('node.id'))
+    parent = relationship("Node", remote_side=id)
+```
+
+假设我们想要增加一个访问器`grandparent`.它将会返回`parent`的`Node.parent`.当我们有一个`Node`实例时，这很简单：
+
+```python
+from sqlalchemy.ext.hybird import hybird_property
+
+
+class Node(Base):
+    # ...
+
+    @hybird_property
+    def grandparent(self):
+        return self.parent.parent
+```
+
+对于表达式来说，事情就没那么简单了。我们需要构建一个`Query`，需要join两次`Node.parent`来获取grandparent.但是我们可以组合使用`Comparator`和`transfomer`：
+
+```python
+from sqlalchemy.ext.hybird import Comparator
+
+
+class GrandparentTransformer(Comparator):
+    def operate(self, op, other):
+        def transform(q):
+            cls = self.__clause_element__()
+            parent_alised = aliased(cls)
+            return q.join(parent_alias, cls.parent).\
+                        filter(op(parent_alias.parent, other))
+        return transform
+
+
+Base = declarative_base()
+
+
+classs Node(Base):
+    __tablename__ = 'node'
+    id = Column(Integer, primary_key=True)
+    parent_id = Column(Integer, ForeignKey('node.id'))
+    parent = relationship("Node", remote_side=id)
+
+    @hybird_property
+    def grandparent(self):
+        return self.parent.parent
+
+    @hybird.comparator
+    def grandparent(cls):
+        return GrandparentTransformer(cls)
+```
+
+`GrandparentTransformer`覆盖了核心`Operators.operate()`方法，返回一个query-transform的可调用对象，它在一个特殊上下文里面使用运行给定的比较操作。比如，在上面例子中，`operate()`方法被调用,在`Operators.eq`(相等比较)的右侧是`Node(id=5)`.调用`transform`函数后，将会把Query和`Node.parent`　join起来，然后比较`parent_alias`，将它传入到`Query.filter()`中:
+
+```python
+>>> from sqlalchemy.orm import Session
+>>> session = Session()
+>>> session.query(Node).\
+...     with_transformation(Node.grandparent == Node(id=5)).\
+...     all()
+```
+
+我们可以修改这个模式让它更加啰嗦，但是更具弹性，可以在"fiter"步骤中分离出"join"步骤:
+
+```python
+class Node(Base):
+    # ...
+
+    @grandparent.comparator
+    def grandparent(cls):
+        # 为每个类缓存一个GrandparentFormer
+        if "_gp" not in cls.__dict__:
+            cls._gp = GrandparentTransformer(cls)
+        return cls._gp
+
+
+class GrandparentTransformer(Comparator):
+
+    def __init__(self, cls):
+        self.parent_cls = aliased(cls)
+
+    @property
+    def join(self):
+        def go(q):
+            return q.join(self.parent_alias, Node.parent)
+        return go
+
+    def operate(self, op, other):
+        return op(self.parent_alias.parent, other)
+```
+
+```python
+>>> session.query(Node).\
+...     with_tranformation(Node.grantdparent.join).\
+...     filter(Node.grandparent==Node(id=5))
+```
+
+"transfomer"是一个高级特性，只推荐老手程序员使用。
+
+### API
+
+- class`sqlalchemy.ext.hybird.hybird_method(func, expr=None)`
+
+    Base: `sqlalchemy.orm.base.InspectionAttrInfo`
+
+    一个装饰器，可以装饰一个Python方法，让它的类级别使用和实例级别使用都具有各自的行为.
+
+    - `__init__(func, expr=None)`
+
+        创建一个`hybird_method`
+
+        通常使用装饰器语法:
+
+        ```python
+        from sqlalchemy.ext.hybird import hybird_method
+
+
+        class SomeClass(object):
+            @hybird_method
+            def value(self, x, y):
+                return self._value + x + y
+
+            @value.expression
+            def value(self, x, y):
+                return func.some_function(self._value, x, y)
+        ```
+    - `expression(expr)`
+
+        提供一个修改装饰器，可以定义生成SQL表达式的方法.
+
+
+- class`sqlalchemy.ext.hybird.hybird_property(fget, fset=None, fdel=None, expr=None, custom_comparator=None, update_expr=None)`
+
+    Base: `sqlalchemy.orm.base.InsepectionAttrInfo`
+
+    一个装饰器，允许为实例级别和类级别都定义各自行为的描述符。
+
+    - `__init__(fget, fset=None, fdel=None, expre=None, custom_comparator=None, update_expr=None)`
+
+        创建一个新的`hybird_property`
+
+        通常使用装饰器语法:
+
+        ```python
+        from sqlalchemy.ext.hybird import hybird_property
+
+
+        class SomeClass(Base):
+            @hybird_property
+            def value(self):
+                return self._value
+
+            @value.setter
+            def value(self, value):
+                self._value = value
+        ```
+
+    - `comparator(comparator)`
+
+        提供一个修改方法，允许定义一个生成自定义比较符的方法.
+
+        被装饰方法返回的值应该是一个`Comparator`实例。
+
+        > 注意
+        >
+        > `hybird_property.comparator()`装饰器将会替换`hybird_property.expression()`。所以两者不能一起使用。
+
+        当一个hybird在类级别被调用，给定的`Comparator`对象将会被封装到一个特殊的`QueryableAttribute`,它和ORM用来表示其它映射属性的类型相同。理由是其它类级的属性如`docstring`或者hybird的一个引用将会在维持在一个数据结构中并返回，并不会修改原始传入的比较符。
+
+        > 如果想要在子类中覆盖这个装饰器，请使用`hybird_proeprty.overrides`
+
+    - `deleter(fdel)`
+
+        提供一个修改装饰器，可以用来定义一个删除方法。
+
+    - `expression(expr)`
+
+        提供一个修改装饰器，可以用来定义一个生成SQL表达式的方法.
+
+    - `getter(fget)`
+
+        提供一个修改装饰器，可以用来定义一个getter方法.
+
+    - `overrides`
+
+        装饰一个方法，将它定义为一个存在属性的覆盖方法。
+
+        `hybird_property.overrides`访问器只会返回这个hybird对象。可以在它的基础上面继续使用`expression()`，`comparator()`.
+
+        ```python
+        class SuperClass(object):
+            # ...
+            
+            @hybird_property
+            def foobar(self):
+                return self._foobar
+
+
+        class SubClass(SuperClass):
+            # ...
+
+            @SuperClass.foobar.overrides.expression
+            def foobar(self):
+                return func.subfoobar(self._foobar)
+        ```
+
+    - `setter(fset)`
+
+        提供一个修改装饰器，可以用来定义一个`setter`方法.
+
+    - `update_expression(meth)`
+
+        提供一个修改装饰器，可以定义一个生成UPDATE元祖的方法。
+
+        这个方法接受单个值，这个值将会被用来生成UPDATE语句的SET字句。这个方法应该将这个值处理成独立的列表达式，让它和最终的SET子句相符，并返回一个2-元祖的序列。每个元祖包含一个列表达式作为键，想要生成的SET值作为值.
+
+        比如：
+
+        ```python
+        class Person(Base):
+            # ...
+
+            first_name = Column(String)
+            last_name = Column(String)
+
+            @hybird_property
+            def fullname(self):
+                return self.first_name + " " + self.last_name
+
+            @fullname.update_expression
+            def fullname(cls, value):
+                fname, lname = value.split(" ", 1)
+                return [
+                    (cls.first_name, fname),
+                    (cls.last_name, lname)
+                ]
+        ```
+
+- 类`sqlalchemy.ext.hybird.Comparator(expression)`
+
+    Base: `sqlalchemy.orm.interfaces.PropComparator`
+
+    一个helper类，可以帮助你们在使用hybirds时可以创建一个自定义的`PropComparator`
+
+- `sqlalchemy.ext.hybird.HYBIRD_METHOD` = `symbol('HYBRID_METHOD')`
+- `sqlalchemy.ext.hybird.HYBIRD_PROPERTY` = `symbol('HYBIRD_PROPERTY')`
+
+    
