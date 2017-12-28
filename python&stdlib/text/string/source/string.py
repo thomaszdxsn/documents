@@ -19,7 +19,7 @@ __all__ = ['ascii_letters', 'ascii_lowercase', 'ascii_uppercase', 'capwords',
            'whitespace', 'Formatter', 'Template']
 
 
-import _string      # string的helper模块   #TODO: 阅读这个模块
+import _string      # string的helper模块   #TODO: 阅读这个模块??找不到
 
 # 一些ctype风格的字符分类字符串
 whitespace = ' \t\n\r\v\f'
@@ -85,7 +85,6 @@ class Template(metaclass=_TemplateMetaclass):
     """一个支持$-替换的字符串类"""
 
     delimiter = '$'
-    # TODO: 测试metaclass.pattern的编译结果
     # r'[a-z]'在使用re.IGNORECASE而不是用re.ASCII的时候可以匹配非ASCII字符
     # 因为向后兼容性的问题，我们不可以加入re.ASCII.
     # 所以我们使用了-i标识以及[a-zA-Z]模式
