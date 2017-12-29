@@ -5,8 +5,6 @@
 ## 项目结构
 
 - app/
-    - base/
-        - base_handler.py
     - module1/
         - \_\_init\_\_.py
         - forms.py
@@ -16,16 +14,14 @@
         - forms.py
         - handlers.py
     - libs/
+        - base.py
         - decorators.py
         - utils.py
         - exceptions.py
-    - dbs/
-        - models/
-            - model1.py
-            - model2.py
-            - ...
-        - service1.py
-        - service2.py
+        - middleware.py
+    - models/
+        - model1.py
+        - model2.py
     - static/
     - templates/
     - \_\_init\_\_.py
