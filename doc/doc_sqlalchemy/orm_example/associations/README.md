@@ -7,3 +7,7 @@
 - `proxied_association.py`
 
     和`basic_association.py`同样的例子，但是使用了`sqlalchemy.ext.associationproxy`.
+
+- `dict_of_sets_with_default.py`
+
+    一个高级的association proxy例子，它阐释了association proxy嵌套，生成多层Python集合的场景，在这个例子中，字典以字符串作为键，以一个整数集合作为值，将底层的映射类隐藏.
