@@ -194,7 +194,132 @@ class Template(metaclass=_TemplateMetaclass):
 # 最难的一部分是C扩展的重用。
 # 暴露了一个"_"前缀方法供str使用
 
-# 总体的parser实现于 _string.formatter_parser
+# 总体的parser实现于 _string.formatter_parser     # C实现
 # field name parser 实现于 _string.formatter_field_name_split
 
-# TODO: 先看完文档和PEP
+
+class Formatter:
+    
+    def format(*args, **kwargs):
+        if not args:
+            raise TypeError("descriptor 'format' of 'Formatter' object "
+                            "needs an object")
+        self, *args = args      # 为了允许传入关键字参数'self'
+        try:
+            format_string, *args = args     # 允许传入关键字参数'format_string'
+        except ValueError:      #! 如果args里面没有format_string，试着从kwargs中找找
+            if 'format_string' in kwargs:
+                format_string = kwargs.pop('format_string')
+                import warnings
+                warnings.warn("Passing 'format_string' as keyword argument is "
+                              "deprecated", DeprecationWarning, stacklevel=2)
+            else:
+                raise TypeError("format() missing 1 required positional "
+                                "argument: 'format_string'") from None
+        return self.vformat(format_string, args, kwargs)
+
+    def vformat(self, format_string, args, kwargs, used_args, recursion_depth,
+                auto_arg_index=0):
+        if recursion_depth < 0:
+            raise ValueError("Max string recursion exceeded")
+        result = []
+        for literal_text, field_name, format_spec, conversion in \
+                self.parse(format_string):
+            
+            # 输出literal_text
+            if literal_text:
+                result.append(literal_text)
+
+            # 如果有一个field，输出它
+            if field_name is not None:
+                # 这是一种标记，找到对象并将它格式化
+
+                # 在给定的field_name为空时，处理参数索引
+                if field_name == '':
+                    if auto_arg_index is False:
+                        raise ValueError("cannot switch from manual field "
+                                        "specification to automatic field "
+                                        "numbering")
+                    field_name = str(auto_arg_index)
+                    auto_arg_index += 1
+                elif field_name.isdigit():
+                    if auto_arg_index:
+                        raise ValueError("cannot switch from manual field "
+                                         "specification to automatic field "
+                                         "numbering")
+                    # 禁用参数索引自增
+                    auto_arg_index = False
+                
+                # 通过给定的field_name，找到它引用的对象
+                obj, arg_used = self.get_field(field_name, args, kwargs)
+                used_args.add(arg_used)
+
+                # 在返回对象中做一些转换
+                obj = self.convert_field(obj, conversion)
+
+                # 如果需要的话，扩展format_spec
+                format_spec, auto_arg_index = self._vformat(
+                    format_spec, args, kwargs,
+                    used_args, recursion_depth-1,
+                    auto_arg_index=auto_arg_index
+                )
+
+                # 将对象格式化并追加到result中
+                result.append(self.format_field(obj, format_spec))
+
+        return "".join(result), auto_arg_index
+
+    def get_value(self, key, args, kwargs):
+        if isinstance(key, int):
+            return args[key]
+        else:
+            return kwargs[key]
+
+    def check_unused_args(self, used_args, args, kwargs):
+        pass
+
+    def format_field(self, value, format_spec):
+        return format(value, format_spec)
+
+    def convert_field(self, value, conversion):
+        # 在结果对象中做一些转换(一般根据显式转义字符)
+        if conversion is None:
+            return value
+        if conversion == 's':
+            return str(value)
+        elif conversion == 'r':
+            return repr(value)
+        elif conversion == 'a':
+            return ascii(value)
+        raise ValueError("Unknown conversion specifier {0!s}".format(conversion))
+
+    # 返回一个可迭代对象，它包含下面形式的元祖:
+    # (literal_text, field_name, format_spec, conversion)
+    # literal_text可以长度为0(!空字符串
+    # field_name可以是None,这个情况下对象不需要格式化输出
+    # 如果field_name不是None，将会使用format_spec将它格式化，并且转换后再输出使用
+    def parse(self, format_string):
+        #! 这显然是一个C实现的解析函数
+        return _string.formatter_parser(format_string)
+
+    # 给定一个field_name，找到它引用的对象
+    # field_name:   这个字段将会被查询，比如"0.name"
+    #                   或者 "lookup[3]"
+    # used_args:    一组已经使用过的参数集合
+    # args, kwargs: 传入到`vformat`中的参数
+    def get_field(self, field_name, args, kwargs):
+        #! first是字段参数名称, rest是它属性的访问方式
+        first, rest = _string.formatter_field_name_split(field_name)
+
+        obj = self.get_value(first, args, kwargs)
+
+        # 迭代field_name的rest, 按需使用getattr或者getitem
+        for is_attr, i in rest:
+            if is_attr:
+                obj = getattr(obj, i)
+            else:
+                obj = obj[i]
+        
+        return obj, first
+            
+                    
