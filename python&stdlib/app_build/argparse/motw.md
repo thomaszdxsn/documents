@@ -1067,8 +1067,358 @@ Namespace(dirname='foo', recursive=True)
 
 ### Advanced Argument Processing(参数处理进阶)
 
-pass
+`argparse`支持更复杂的参数规范，可以定义可变长度的参数列表，枚举值，或者常数值。
+
+#### Variable Argument Lists(可变长度参数列表)
+
+单个参数定义可以配置来消耗命令行的多个参数值。可以根据需求来设置`nargs`.
 
 
+值 | 意义
+-- | ---
+N | 参数数量的绝对值(比如.3)
+? | 0或1个参数
+* | 0或所有参数
++ | 1或所有参数
 
+##### argparse_nargs.py
+
+```python
+# argparse_nargs.py
+
+import argparse
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument('--three', nargs=3)
+parser.add_argument("--optional", nargs='?')
+parser.add_argument("--all", nargs='*', dest='all')
+parser.add_argument('--one-or-more', nargs='+')
+
+print(parser.parse_args())
+```
+
+下面是nargs的各种用法:
+
+```shell
+$ python3 argsparse_nargs.py -h
+
+usage: argparse_nargs.py [-h] [--three THREE THREE THREE]
+                [--optional [OPTIONAL]]
+                [--all [ALL [ALL ...]]]
+                [--one-or-more ONE_OR_MORE [ONE_OR_MORE ...]]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --three THREE THREE THREE
+  --optional [OPTIONAL]
+  --all [ALL [ALL ...]]
+  --one-or-more ONE_OR_MORE [ONE_OR_MORE ...]
+
+$ python3 argparse_nargs.py
+
+Namespace(all=None, one_or_more=None, optional=None, three=None)
+
+$ python3 argparse_nargs.py --three
+
+usage: argparse_nargs.py [-h] [--three THREE THREE THREE]
+                [--optional [OPTIONAL]]
+                [--all [ALL [ALL ...]]]
+                [--one-or-more ONE_OR_MORE [ONE_OR_MORE ...]]
+argparse_nargs.py: error: argument --three: expected 3
+argument(s)
+
+$ python3 argparse_nargs.py --three a b c
+
+Namespace(all=None, one_or_more=None, optional=None,
+three=['a', 'b', 'c'])
+
+$ python3 argparse_nargs.py --optional
+
+Namespace(all=None, one_or_more=None, optional=None, three=None)
+
+$ python3 argparse_nargs.py --optional with_value
+
+Namespace(all=None, one_or_more=None, optional='with_value',
+three=None)
+
+$ python3 argparse_nargs.py --all with multiple values
+
+Namespace(all=['with', 'multiple', 'values'], one_or_more=None,
+optional=None, three=None)
+
+$ python3 argparse_nargs.py --one-or-more with_value
+
+Namespace(all=None, one_or_more=['with_value'], optional=None,
+three=None)
+
+$ python3 argparse_nargs.py --one-or-more with multiple values
+
+Namespace(all=None, one_or_more=['with', 'multiple', 'values'],
+optional=None, three=None)
+
+$ python3 argparse_nargs.py --one-or-more
+
+usage: argparse_nargs.py [-h] [--three THREE THREE THREE]
+                [--optional [OPTIONAL]]
+                [--all [ALL [ALL ...]]]
+                [--one-or-more ONE_OR_MORE [ONE_OR_MORE ...]]
+argparse_nargs.py: error: argument --one-or-more: expected
+at least one argument
+```
+
+#### Argument Types(参数类型)
+
+`argparse`默认把所有参数当作字符串，除非你指定要把字符串转换为其它类型。通过`add_argument`的`type`参数来至指定转换函数，它会被`ArgumentParser`在解析参数时将它转换。
+
+##### argparse_type.py
+
+```python
+# argparse_type.py
+
+parser = argparser.ArgumentParser()
+
+parser.add_argument('-i', type=int)
+parser.add_argument('-f', type=float)
+parser.add_argument('--file', type=open)
+
+try:
+    print(parser.parse_args())
+except IOError as msg:
+    parser.error(str(msg))
+```
+
+任何只接受单个字符串参数的可调用对象都可以当作`type`参数，包括内置的`int`,`float`甚至`open()`:
+
+```shell
+$ python3 argparse_type.py -i 1
+
+Namespace(f=None, file=None, i=1)
+
+$ python3 argparse_type.py -f 3.14
+
+Namespace(f=3.14, file=None, i=None)
+
+$ python3 argparse_type.py --file argparse_type.py
+
+Namespace(f=None, file=<_io.TextIOWrapper
+name='argparse_type.py' mode='r' encoding='UTF-8'>, i=None)
+```
+
+如果类型转换失败，`argparse`会抛出错误。`TypeError`和`ValueError`会在`argparse`内部捕获，然后转换为错误信息显示给用户。其它的异常，比如当文件不存在时出现的`IOError`，用户必须手动处理它（调用`ArgumentParser.error`）。
+
+```shell
+$ python3 argparse_type.py -i a
+
+usage: argparse_type.py [-h] [-i I] [-f F] [--file FILE]
+argparse_type.py: error: argument -i: invalid int value: 'a'
+
+$ python3 argparse_type.py -f 3.14.15
+
+usage: argparse_type.py [-h] [-i I] [-f F] [--file FILE]
+argparse_type.py: error: argument -f: invalid float value:
+'3.14.15'
+
+$ python3 argparse_type.py --file does_not_exist.txt
+
+usage: argparse_type.py [-h] [-i I] [-f F] [--file FILE]
+argparse_type.py: error: [Errno 2] No such file or directory:
+'does_not_exist.txt'
+```
+
+##### argparse_choices.py
+
+想要限制参数值必须从预先定义的集合中选一个，可以使用`choices`参数:
+
+```python
+# argparse_choices.py
+
+import argparse
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument(
+    '--mode',
+    choices=('read-only', 'read-write'),
+)
+
+print(parser.parse_args())
+```
+
+如果传入的`--mode`参数值不是被允许传入的值，将会生成一个错误并且终止运行。
+
+```shell
+$ python3 argparse_choices.py -h
+
+usage: argparse_choices.py [-h] [--mode {read-only,read-write}]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --mode {read-only,read-write}
+
+$ python3 argparse_choices.py --mode read-only
+
+Namespace(mode='read-only')
+
+$ python3 argparse_choices.py --mode invalid
+
+usage: argparse_choices.py [-h] [--mode {read-only,read-write}]
+argparse_choices.py: error: argument --mode: invalid choice:
+'invalid' (choose from 'read-only', 'read-write')
+```
+
+#### File Arguments(文件参数)
+
+虽然`file`对象可以通过单个字符串对象来实例化，但是没有办法传入`mode`参数。`FileType`提供了一个弹性的方法来将一个参数转换为文件对象，并且包含mode和buffer_size(注：可以使用functools.partial实现，但是还是需要将文件对象close掉).
+
+##### argparse_FileType.py
+
+```python
+# argparse.FileType.py
+
+import argparse
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument('-i', metavar='in-file',
+                    type=argparse.FileType('rt'))
+parser.add_argument('-o', metavar='out-file',
+                    type=argparse.FileType('wt'))
+
+try:
+    results = parser.parse_args()
+    print("Input file:", result.i)
+    print("Output file:", result.o)
+except IOError as msg:
+    parser.error(str(msg))
+```
+
+参数绑定的值是一个打开文件的句柄。程序应该在不需要这个句柄的时候负责关闭掉它。
+
+```shell
+$ python3 argparse_FileType.py -h
+
+usage: argparse_FileType.py [-h] [-i in-file] [-o out-file]
+
+optional arguments:
+  -h, --help   show this help message and exit
+  -i in-file
+  -o out-file
+
+$ python3 argparse_FileType.py -i argparse_FileType.py -o tmp_\
+file.txt
+
+Input file: <_io.TextIOWrapper name='argparse_FileType.py'
+mode='rt' encoding='UTF-8'>
+Output file: <_io.TextIOWrapper name='tmp_file.txt' mode='wt'
+encoding='UTF-8'>
+
+$ python3 argparse_FileType.py -i no_such_file.txt
+
+usage: argparse_FileType.py [-h] [-i in-file] [-o out-file]
+argparse_FileType.py: error: argument -i: can't open
+'no_such_file.txt': [Errno 2] No such file or directory:
+'no_such_file.txt'
+```
+
+#### Custom Action(自定义Action)
+
+除了之前描述的内置action，可以通过实现Action的API来实现一个自定义的Action。这个对象应该接收下面例子中描述的那些参数，返回一个可调用对象，让解析器使用它来处理参数，`namespace`最后保存处理的结果。
+
+##### argparse_custom_action.py
+
+Action类提供了定义新Action的基础。它的构造器处理参数定义，所以只需要在子类中重写`__call__`即可.
+
+```python
+# argparse_custom_action.py
+
+import argparse
+
+
+class CustomAction(argparse.Action):
+    def __init__(self,
+                 option_strings,
+                 dest,
+                 nargs=None,
+                 const=None,
+                 default=None,
+                 type=None,
+                 choices=None,
+                 required=False,
+                 help=None,
+                 metavar=None):
+        argparse.Action.__init__(self,
+                                 option_strings,
+                                 dest,
+                                 nargs=None,
+                                 const=None,
+                                 default=None,
+                                 type=None,
+                                 choices=None,
+                                 required=False,
+                                 help=None,
+                                 metavar=None)
+        print("Initializing CustomAction")
+        for name, value in sorted(locals().items()):
+            if name == 'self' or value is None:
+                continue
+            print('  {} = {!r}'.format(name, value))
+        print()
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        print("Processing CustomAction for {}".format(self.dest))
+        print("  parser = {}".format(id(parser)))
+        print("  values = {!r}".format(values))
+        print("  option_string = {!r}".format(option_string))
+        
+        # 对输入值随便做些操作
+        if isinstance(values, list):
+            values = [v.upper() for v in values]
+        else:
+            values = values.upper()
+        # 使用self.dest作为属性名，将参数值保存到namespace中
+        setattr(namespace, self.dest, values)
+
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument('-a', action=CustomAction)
+parser.add_argument('-m', nargs='*', action=CustomAction)
+
+results = parser.parse_args(['-a', 'value',
+                             '-m', 'multivalue',
+                             'second'])
+print(results)
+```
+
+`values`的类型由`nargs`的值来决定。如果这个参数允许多个值，`values`就是一个列表，即使它可能只包含一个值。
+
+`option_string`同样依赖于原始的参数规范。对于必填的位置参数，`option_string`总是为`None`.
+
+```shel
+$ python3 argparse_custom_action.py
+
+Initializing CustomAction
+  dest = 'a'
+  option_strings = ['-a']
+  required = False
+
+Initializing CustomAction
+  dest = 'm'
+  nargs = '*'
+  option_strings = ['-m']
+  required = False
+
+Processing CustomAction for a
+  parser = 4315836992
+  values = 'value'
+  option_string = '-a'
+
+Processing CustomAction for m
+  parser = 4315836992
+  values = ['multivalue', 'second']
+  option_string = '-m'
+
+Namespace(a='VALUE', m=['MULTIVALUE', 'SECOND'])
+```
 
