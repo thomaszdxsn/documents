@@ -135,7 +135,169 @@ required: count, units
 
 #### Argument Actions(参数动作)
 
-pass
+有６种内置的动作可以由参数触发:
 
+- `store`
+
+    保存参数值，可以选择转换成其它类型再保存。这是默认的action选择.
+
+- `store_const`
+
+    保存一个符合参数规范的参数值。通常用于实现非布尔值的命令行flag.
+
+- `store_true/store_false`
+
+    保存合适的布尔值。这个动作用来实现布尔值切换。
+
+- `append`
+
+    将参数值保存到一个列表中。如果参数重复出现，就会保存多个参数值。
+
+- `append_const`
+
+    将参数规范中的值保存到一个列表中。
+
+- `version`
+
+    打印程序的版本细节，然后退出.
+
+##### argparse_action.py
+
+这个例子讲解了每个action类型，其它的配置尽量保持最简化:
+
+```python
+# argparse_action.py
+
+import argparse
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument('-s', action='store',
+                    dest='simple_value',
+                    help='Store a simple value')
+
+parser.add_argument('-c', action='store_const',
+                    dest='constant_value',
+                    const='value-to-store',
+                    help='Store a constant value')
+
+parser.add_argument('-t', action='store_true',
+                    default=False,
+                    dest='boolean_t',
+                    help='Set a switch to true')
+parser.add_argument('-f', action='store_false,
+                    default=True,
+                    dest='boolean_f',
+                    help='Set a switch to False')
+
+parser.add_argument('-a', action='append',
+                    dest='collection',
+                    default=[],
+                    help='Add repeated value to a list')
+
+parser.add_argument('-A', action='append_const',
+                    dest='const_collection',
+                    const='value-1-to-append',
+                    default=[],
+                    help='Add different values to list')
+parser.add_argument('-B', action='append_const',
+                    dest='const_collection',
+                    const='value-2-to-append',
+                    help='Add different values to list')
+
+parser.add_argument('--version', action='version',
+                    version='%(prog)s 1.0')
+
+results = parser.parse_args()
+print("simple_value         = {!r}".format(results.simple_value))
+print("constant_value       = {!r}".format(results.constant_value))
+print("boolean_t            = {!r}".format(results.boolean_t))
+print("boolean_f            = {!r}".format(results.boolean_f))
+print("collection           = {!r}".format(result.collection))
+print("const_collection     = {!r}".format(result.const_collection))
+```
+
+`-t`和`-f`配置用来修改不同的布尔值.`-A`和`-B`的`dest`是一样的，所以它们的值都会追加到同一个列表中。
+
+```python
+$ python3 argparse_action.py -h
+
+
+usage: argparse_action.py [-h] [-s SIMPLE_VALUE] [-c] [-t] [-f]
+                          [-a COLLECTION] [-A] [-B] [--version]
+
+optional arguments:
+  -h, --help       show this help message and exit
+  -s SIMPLE_VALUE  Store a simple value
+  -c               Store a constant value
+  -t               Set a switch to true
+  -f               Set a switch to false
+  -a COLLECTION    Add repeated values to a list
+  -A               Add different values to list
+  -B               Add different values to list
+  --version        show program's version number and exit
+
+$ python3 argparse_action.py -s value
+
+simple_value     = 'value'
+constant_value   = None
+boolean_t        = False
+boolean_f        = True
+collection       = []
+const_collection = []
+
+$ python3 argparse_action.py -c
+
+simple_value     = None
+constant_value   = 'value-to-store'
+boolean_t        = False
+boolean_f        = True
+collection       = []
+const_collection = []
+
+$ python3 argparse_action.py -t
+
+simple_value     = None
+constant_value   = None
+boolean_t        = True
+boolean_f        = True
+collection       = []
+const_collection = []
+
+$ python3 argparse_action.py -f
+
+simple_value     = None
+constant_value   = None
+boolean_t        = False
+boolean_f        = False
+collection       = []
+const_collection = []
+
+$ python3 argparse_action.py -a one -a two -a three
+
+simple_value     = None
+constant_value   = None
+boolean_t        = False
+boolean_f        = True
+collection       = ['one', 'two', 'three']
+const_collection = []
+
+$ python3 argparse_action.py -B -A
+
+simple_value     = None
+constant_value   = None
+boolean_t        = False
+boolean_f        = True
+collection       = []
+const_collection = ['value-2-to-append', 'value-1-to-append']
+
+$ python3 argparse_action.py --version
+
+argparse_action.py 1.0
+```
+
+#### Option Prefiexs(选项参数前缀)
+
+pass
 
 
