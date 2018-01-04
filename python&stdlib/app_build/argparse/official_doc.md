@@ -92,4 +92,12 @@ prog.py: error: argument N: invalid int value: 'a'
 
 #### Parsing Arguments(解析函数)
 
-pass
+`ArgumentParser`使用`parse_args()`方法来解析参数。这个方法将会检查命令行参数，然后将参数转换为适当的类型，触发适当的动作。大多数情况下，`Namespace`对象即由命令行解析而来的：
+
+```python
+>>> parser.parse_args(['--sum', '7', '-1', '42'])
+Namespace([accumulate=<bultin-in fumction sum>, integers=[7, -1, 42]])
+```
+
+在脚本中，通常会直接调用`parse_args()`，不传入任何参数。`ArgumentParser`将会自动从`sys.argv`拿取命令行参数。
+
