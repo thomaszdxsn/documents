@@ -101,3 +101,112 @@ Namespace([accumulate=<bultin-in fumction sum>, integers=[7, -1, 42]])
 
 在脚本中，通常会直接调用`parse_args()`，不传入任何参数。`ArgumentParser`将会自动从`sys.argv`拿取命令行参数。
 
+
+### ArgumentParser objects(ArgumentParser对象)
+
+class`argparse.ArgumentParser(proj=None, usage=None, description=None, epilog=None, parents[], formatter_class=argparse.HelpFormatter, prefix_chars='-', fromfile_prefix_chars=None, argument_default=None, 
+conflict_handler='error', add_help=True, allow_abbrev=True)`
+
+构建新的`ArgumentParser`对象时，所有传入的参数都必须是关键字形式。每个关键字参数我们都会在之后详细讨论，下面是它们的简介:
+
+- `prog`: 程序的名称(默认为`sys.argv[0]`)
+- `usage`: 描述程序用法的字符串(默认会根据加入到这个parser的参数而自动生成)
+- `description`: 参数帮助之前显示的文本(默认:`None`)
+- `epilog`: 在参数帮助之后显示的文本(默认:`None`)
+- `parents`: 一个`ArgumentParser`对象的列表。应该包含它们定义的参数。
+- `formatter_class`: 一个自定义的类，用于帮助文本输出的格式化处理。
+- `prefix_chars`: 选项参数的前缀(默认为`-`)
+- `fromfile_prefix_chars`: 额外从含有这个前缀的文件名中读取一些数据(默认:`None`)
+- `argument_default`: 参数的全局默认值(默认:`None`)
+- `conflict_handler`: 解决冲突选项的策略(通常不需要指定)
+- `add_help`: 为parser加入`-h/--help`选项(默认:`True`)
+- `allow_abbrev`: 如果缩写不是模棱两个容易混淆的话，运行长选项使用缩写形式(默认:`True`)
+
+下面的章节详细描述了每一个参数.
+
+#### prog
+
+默认情况下，`ArgumentParser`使用`sys.argv[0]`来作为显示在程序名称。默认行为大多数时候是合理的，因为它符合实际情况。比如，假设有一个叫做`myprogram.py`的文件：
+
+```pyhton
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--foo', help='foohelp')
+args = parser.parse_args()
+```
+
+这个程序的帮助文本中，`myprogram.py`作为程序名称出现(不管程序从哪里被调用):
+
+```shell
+$ python myprogram.py --help
+usage: myprogram.py [-h] [--foo FOO]
+
+optional arguments:
+ -h, --help  show this help message and exit
+ --foo FOO   foo help
+$ cd ..
+$ python subdir/myprogram.py --help
+usage: myprogram.py [-h] [--foo FOO]
+
+optional arguments:
+ -h, --help  show this help message and exit
+ --foo FOO   foo help
+```
+
+可以通过修改`prog`参数来改变这个默认的行为：
+
+```python
+>>> parser = argparse.ArgumentParser(prog='myprogram')
+>>> parser.print_help()
+usage: myprogram [-h]
+
+optional arguments:
+ -h, --help  show this help message and exit
+```
+
+注意无论是使用`sys.argv[0]`还是`prog=`指定的程序名称，都可以在帮助文本中使用`%(prog)s`格式化标识符来获取：
+
+```shell
+>>> parser = argparse.ArgumentParser(prog='myprogram')
+>>> parser.add_argument('--foo', help='foo of the %(prog)s program')
+>>> parser.print_help()
+usage: myprogram [-h] [--foo FOO]
+
+optional arguments:
+ -h, --help  show this help message and exit
+ --foo FOO   foo of the myprogram program
+```
+
+#### usage
+
+默认情况下，`ArgumentParser`会根据它包含的参数计算出使用方法信息:
+
+```python
+>>> parser = argparse.ArgumentParser(profg='PROG')
+>>> parser.add_argument('--foo', nargs='?', help='foo help')
+>>> parser.add_argument('bar', nargs='+', help='bar help')
+>>> parser.print_help()
+usage: PROG [-h] [--foo [FOO]] bar [bar ...]
+
+positional arguments:
+ bar          bar help
+
+optional arguments:
+ -h, --help   show this help message and exit
+ --foo [FOO]  foo help
+```
+
+默认的信息可以通过`usage=`关键字参数来覆盖：
+
+```python
+>>> parser = argparse.ArgumentParser(prog='PROG', usage='%(prog)s [options])
+>>> parser.add_argument('--foo', nargs='?', help='foo help')
+>>> parser.add_argument('bar', nargs='+', help='bar help')
+
+```
+
+
+```graphTB
+A-->B
+```

@@ -271,4 +271,4 @@ class DeadlockDetection(bootsteps.StartStopStep):
 
 - `consumer.reset_rate_limits()`
 
-# ...
+#...这章主要介绍扩展bootstep，暂时没有这种深度定制的需求，略
