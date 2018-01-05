@@ -203,10 +203,142 @@ optional arguments:
 >>> parser = argparse.ArgumentParser(prog='PROG', usage='%(prog)s [options])
 >>> parser.add_argument('--foo', nargs='?', help='foo help')
 >>> parser.add_argument('bar', nargs='+', help='bar help')
+>>> parser.print_help()
+usage: PROG [options]
 
+positional arguments:
+ bar          bar help
+
+optional arguments:
+ -h, --help   show this help message and exit
+ --foo [FOO]  foo help
 ```
 
+在你的使用方法信息中就可以加入格式化字符串`%(prog)s`.
 
-```graphTB
-A-->B
+#### description
+
+大多数时候，调用`ArgumentParser`构造器时都会传入`description`参数。这个参数将会赋予程序一个简短的描述。在帮助文本中，description出现在位于命令行使用方法(usage)字符串和各种参数帮助文本之间的位置：
+
+```python
+>>> parser = argparse.ArgumentParser(description='A foo that bars')
+>>> parser.print_help()
+usage: argparse.py [-h]
+
+A foo that bars
+
+optional arguments:
+ -h, --help  show this help message and exit
 ```
+
+默认情况下，这个description会自动换行(line-wrapped).要想不开启自动换行，需要了解一下`formatter_class`参数.
+
+#### epilog
+
+一些程序需要在参数的帮助文本之后再显示一段文本。可以通过`epilog=`参数来指定这一段文本:
+
+```python
+>>> parser = argparse.ArgumentParser(
+...     description='A foo that bars',
+...     epilog="And that's how you'd foo a bar")
+>>> parser.print_help()
+usage: argparse.py [-h]
+
+A foo that bars
+
+optional arguments:
+ -h, --help  show this help message and exit
+
+And that's how you'd foo a bar
+```
+
+和`description`一样，`epilog`默认也是会自动换行的。
+
+#### parents
+
+有时，几个parser需要共享一组参数。手动重复定义这些参数的话太蠢了，一个parser将会共享`parents`中所有`ArgumentParser`对象中的参数。这个`parents=`参数接受一个`ArgumentParser`对象的list：
+
+```python
+>>> parent_parser = argparse.ArgumentParser(add_help=False)
+>>> parent_parser.add_argument('--parent', type=int)
+
+>>> foo_parser = argparse.ArgumentParser(parents=[parent_parser])
+>>> foo_parser.add_argument('foo')
+>>> foo_parser.parse_args(['--parent', '2', 'XXX'])
+Namespace(foo='XXX', parent=2)
+
+>>> bar_parser = argparse.ArgumentParser(parents=[parent_parser])
+>>> bar_parser.add_argument('--bar')
+>>> bar_parser.parse_args(['--bar', 'YYY'])
+Namespace(bar='YYY', parent=None)
+```
+
+注意，一般情况下parent parser都会设定`add_help=False`.否则，`ArgumentParser`将会看到两个`-h/--help`选项，出现了这种冲突程序就不能运行。
+
+> 注意
+>
+>> 在将对象传入到`parents=`之前必须将对象实例化。如果你在子类实例化之后修改父类解析器，这个改动不会映射到子类.
+
+#### formatter_class
+
+`ArgumentParser`允许你自定义一个格式化类来格式化帮助文本。目前，有4个内置的格式化类:
+
+- class`argparse.RawDescriptionHelpFormatter`
+- class`argparse.RawTextHelpFormatter`
+- class`argparse.ArgumentDefaultHelpFormatter`
+- class`argpatse.MetavarTypeHelpFormatter`
+
+`RawDescriptionHelpFormatter`和`RawTextHelpFormatter`运行显示更加原生的描述文本。默认情况下，`ArgumentParser`会将帮助文本中的`description`和`epilog`文本自动换行:
+
+```python
+>>> parser = argparse.ArgumentParser(
+...     prog='PROG',
+...     description='''this description
+...         was indented weired
+...             but that is okay''',
+...     epilog='''
+...             likewise for this epilog whose whitespace will
+...         be cleaned up and whose words will be wrapped
+...         across a couple line''')
+>>> parser.print_help()
+usage: PROG [-h]
+
+this description was indented weird but that is okay
+
+optional arguments:
+ -h, --help  show this help message and exit
+
+likewise for this epilog whose whitespace will be cleaned up and whose words
+will be wrapped across a couple lines
+)
+```
+
+将`RawDescriptionHelpFormatter`当作`formatter_class`参数后，`description`和`epilog`可以正常显示了，不会再自动换行:
+
+```python
+>>> parser = argparse.ArgumentParser(
+...     prog='PROG',
+...     formatter_class=argparse.RawDescriptionHelpFormatter,
+...     description=textwrap.dedent('''\
+...         Please do not mess up this text!
+...         --------------------------------
+...             I have indented it
+...             exactly the way
+...             I want it
+...         '''))
+>>> parser.print_help()
+usage: PROG [-h]
+
+Please do not mess up this text!
+--------------------------------
+   I have indented it
+   exactly the way
+   I want it
+
+optional arguments:
+ -h, --help  show this help message and exit
+```
+
+`RawTextHelpFormatter`将会维持所有帮助文本的空格符，参数的帮助文本也一样。
+
+...
