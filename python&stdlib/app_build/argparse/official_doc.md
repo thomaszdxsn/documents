@@ -339,6 +339,183 @@ optional arguments:
  -h, --help  show this help message and exit
 ```
 
-`RawTextHelpFormatter`将会维持所有帮助文本的空格符，参数的帮助文本也一样。
+`RawTextHelpFormatter`将会保持所有帮助文本的空格符不变，即使是参数的帮助文本也一样。
 
-...
+`ArgumentDefaultHelpFormatter`自动为每个参数的帮助文本加入默认值的信息:
+
+```python
+>>> parser = argparse.ArgumentParser(
+...     prog='PROG',
+...     formatter_class=argparse.ArgumentParserDefaultHelpFormatter)
+>>> parser.add_argument('--foo', type=int, default=42, help='Foo!')
+>>> parser.add_argument('bar', nargs='*', default=[1, 2, 3], help='Bar!')
+>>> parser.print_help()
+usage: PROG [-h] [--foo FOO] [bar [bar ...]]
+
+positional arguments:
+ bar         BAR! (default: [1, 2, 3])
+
+optional arguments:
+ -h, --help  show this help message and exit
+ --foo FOO   FOO! (default: 42)    
+```
+
+`MetavarTypeHelpFormatter`将参数的`type`显示为参数值(而不是使用`dest`):
+
+```python
+>>> parser = argparse.ArgumentParser(
+...     prog='PROG',
+...     formatter_class=argparse.MetavarTypeHelpFormatter)
+>>> parser.add_argument('--foo', type=int)
+>>> parser.add_argument('bar', type=float)
+>>> parser.print_help()
+usage: PROG [-h] [--foo int] float
+
+positional arguments:
+  float
+
+optional arguments:
+  -h, --help  show this help message and exit
+  --foo int
+```
+
+#### prefix_chars
+
+大多数命令行选项都是使用`-`作为前缀字符，比如`-f/--foo`.但解析器可以支持不同的前缀字符，或者额外支持一些前缀字符。通过`perfix_chars=`来指定：
+
+```python
+>>> parser = argparse.ArgumentParser(prog='PROG', prefix_chars='-+')
+>>> parser.add_argument('+f')
+>>> parser.add_argument('++bar')
+>>> parser.parse_args('+f X ++bar Y'.split())
+Namespace(bar='Y', f='X')
+```
+
+默认的`prefix_chars`值为`-`.
+
+#### fromfile_prefix_chars
+
+有时可能需要处理一个特别长的参数列表，这些参数先让放在文件中更加合适(而不是一个个用手敲)。如果为`ArgumentParser`构造器赋予了`fromfile_prefix_chars`参数，那么参数重任何以这个特殊字符开头的都会当作文件：
+
+```python
+>>> with open('args.txt', 'w') as fp:
+...     fp.write('-f\nbar')
+>>> parser = argparse.ArgumentParser(fromfile_prefix_chars='@')
+>>> parser.add_argument('-f')
+>>> parser.parse_args(['-f', 'foo', '@args.txt'])
+Namespace(f='bar')
+```
+
+包含参数的文件必须是每行一个参数的格式(但是可以自定义`convert_arg_line_to_args()`方法来改变这个行为)。所以在上面例子中，表达式`['-f', 'foo', '@args.txt']`将会等同于表达式`['-f', 'foo', '-f', 'bar']`.
+
+这个参数`fromfile_prefix_chars`默认为`None`，意思就是参数用于不会被当作是文件的引用。
+
+#### argument_default
+
+一般来说，参数的默认值要么是调用`add_argument()`的时候传入，要么可以调用`set_defaults()`再加上一个特殊的键值对集合。但是有时候可能需要对解析器设置一个全局的默认值。可以通过`argument_default`这个参数来实现。比如可以设置在没有传入参数时不在调用`parse_args()`后创建参数属性，可以通过常量`SUPPRESS`来实现:
+
+```python
+>>> parser = argparse.ArgumentParser(argument_default=argparse.SUPPRESS)
+>>> parser.add_argument('-foo')
+>>> parser.add_argument('bar', nargs='?')
+>>> parser.parse_args(['--foo', '1', 'BAR'])
+Namespace(bar='BAR', foo='1')
+>>> parser.parse_args([])
+Namespace()
+```
+
+#### allow_abbrev
+
+通常，在你为`parse_args()`方法传入一个参数list之后，它可以识别出长选项的缩写形式。
+
+这个特性可以通过`allow_abbrev=False`来关闭:
+
+```python
+>>> parser.argparser.ArgumentParser(prog='PROG', allow_abbrev=False)
+>>> parser.add_argument('--foobar', action='store_true')
+>>> parser.add_argument('--foonley', action='store_false')
+>>> parser.parse_args(['--foon'])
+usage: PROG [-h] [--foobar] [--foonley]
+PROG: error: unrecognized arguments: --foon
+```
+
+#### conflict_handler
+
+`ArgumentParser`不允许对同一个选项支持两个不一样的动作。默认情况下，用一个已经使用的选项名重新定义参数时，会抛出异常：
+
+```python
+>>> parser = argparse.ArgumentParser(prog='PROG')
+>>> parser.add_argument('-f', '--foo', help='old foo help')
+>>> parser.add_argument('--foo', help='new foo help')
+Traceback (most recent call last):
+ ..
+ArgumentError: argument --foo: conflicting option string(s): --foo
+```
+
+有时(特别是使用`parents`参数的情况)，我们想要只是让后定义的参数覆盖之前定义的参数。可以通过设置参数`conflict_handler='resolve'`来实现：
+
+```python
+>>> parser = argparse.ArgumentParser(prog='PROG', conflict_handler='resolve')
+>>> parser.add_argument('-f', '--foo', help='old foo help')
+>>> parser.add_argument('--foo', help='new foo help')
+>>> parser.print_help()
+usage: PROG [-h] [-f FOO] [--foo FOO]
+
+optional arguments:
+ -h, --help  show this help message and exit
+ -f FOO      old foo help
+ --foo FOO   new foo help
+```
+
+注意`ArgumentParser`只会移除那些被后来的参数定义覆盖的选项。在上面的例子中，`-f/--foo`选项仍然保留了`-f`的动作，因为只用`--foo`这个选项被覆盖了。
+
+#### add_help
+
+默认情况下，`ArgumentParser`对象会自动加入一个选项，使用它可显示帮助文本。比如，假设有一个程序叫做`myprogram.py`:
+
+```python
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument('--foo', help='foo help')
+args = parser.parse_args()
+```
+
+如果在命令行使用了`-h/--help`选项，`ArgumentParser`将会打印这样的帮助文本:
+
+```pyhton
+$ python myprogram.py --help
+usage: myprogram.py [-h] [--foo FOO]
+
+optional arguments:
+ -h, --help  show this help message and exit
+ --foo FOO   foo help
+```
+
+偶尔，可能也需要不显示帮助文本的情况。可以设置参数`add_help=False`:
+
+```python
+>>> parser = argparse.ArgumentParser(prog='PROG', add_help=False)
+>>> parser.add_argument('--foo', help='foo help')
+>>> parser.print_help()
+usage: PROG [--foo FOO]
+
+optional arguments:
+ --foo FOO  foo help
+```
+
+版主选项一般是`-h/--help`。有一个例外就是`prefix_chars`没有指定使用`-`，在这种情况下，`-h`和`--help`就不再是合法的选项了，将会使用`prefix_chars`中的第一个字符串作为帮助选项的前缀字符:
+
+```python
+>>> parser = argparse.ArgumentParser(prog='PROG', prefix_chars='+/')
+>>> parser.print_help()
+usage: PROG [+h]
+
+optional arguments:
+  +h, ++help  show this help message and exit
+```
+
+### The add_argument() method(方法：add_argument())
+
+
+
+
