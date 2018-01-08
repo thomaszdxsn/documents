@@ -516,6 +516,148 @@ optional arguments:
 
 ### The add_argument() method(方法：add_argument())
 
+`ArgumentParser.add_argument(name or flags...[, action][, nargs][, default][, type][, choices][, required][, help][, metavar][, dest]`
 
+定义如何解析一个命令行参数。默认参数都在之后的章节有详细的介绍，下面是它们的简介:
 
+- `name or flags` - 可以是一个名称或者一个选项字符串的list，比如`foo`或者`-f, --foo`。
+- `action` - 在参数出现在命令行时发送的动作。
+- `nargs` - 应该被消费的命令行参数数量。
+- `const` - 一个常量值。需要设定`action`或者`nargs`。
+- `default` - 如果参数没有出现在命令行时参数的默认值。
+- `type` - 这是命令行参数转换为的类型。
+- `choices` - 一个容器，包含允许使用的参数。
+- `required` - 参数是否可以被忽略。
+- `help` - 这个参数的简短描述。
+- `metavar` - 参数在使用方法中显示的名称。
+- `dest` - `parse_args()`之后加入到命名空间对象的属性名称。
 
+#### name or flags
+
+`add_argument()`必须知道这个参数是一个选项参数，比如`-f`或者`--foo`，还是一个位置参数，比如一组文件名称。所以传入`add_argument()`的首个参数要么是一系列的flags，或者一个简单的参数名称。比如，一个简单的选项参数可以这样创建:
+
+```python
+>>> parser.add_argument('-f', '--foo')
+```
+
+一个位置参数可以这样创建：
+
+```python
+>>> parser.add_argument('bar')
+```
+
+当调用`parse_args()`之后，选项参数将根据前缀`-`来识别，余下的参数都会被假定为位置参数:
+
+```python
+>>> parser = argparse.ArgumentParser(prog='PROG')
+>>> parser.add_argument('-f', '--foo')
+>>> parser.add_argument('bar')
+>>> parser.parse_args(['Bar'])
+Namespace(bar='BAR', foo=None)
+>>> parser.parse_args(['BAR', '--foo', 'FOO'])
+Namespace(bar='BAR', foo='FOO')
+>>> parser.parse_args(['--foo', 'FOO'])
+usage: PROG [-h] [-f FOO] bar
+PROG: error: too few arguments
+```
+
+#### action
+
+`ArgumentParser`对象可以关联命令行参数和action。action可以对和它们关联的命令行参数做任何事情，虽然大多数action只是简单地为`parse_args()`返回的对象增加属性。`action`关键字参数指定命令行参数应该被怎样处理。内置的action包括：
+
+- `store` - 简单地存储参数值。这是默认的action。例如:
+
+    ```python
+    >>> parser = argparse.ArgumentParser()
+    >>> parser.add_argument('--foo')
+    >>> parser.parse_args('--foo 1'.split())
+    Namespace(foo='1')
+    ```
+
+- `store_const` - 这个action将`const`关键字参数作为值来存储。`store_const`通常用来将选项参数装饰为flag。例如:
+
+    ```python
+    >>> parser = argparse.ArgumentParser()
+    >>> parser.add_argument('--foo', action='store_const', const=42)
+    >>> parser.parse_args(['--foo'])
+    Namespace(foo=42)
+    ```
+
+- `store_true`和`store_false` - 它们都是`store_const`的一种特殊形式，分别用来存储`True`和`False`。另外，如果没有指定这些参数，它们会就会分别代表相反的值，即`False`和`True`：
+
+    ```python
+    >>> parser = argparse.ArgumentParser()
+    >>> parser.add_argument('--foo', action='store_true')
+    >>> parser.add_argument('--bar', action='store_false')
+    >>> parser.add_argument('--baz', action='store_false')
+    >>> parser.parse_args('--foo --bar'.split())
+    Namespace(foo=True, bar=False, baz=True)
+    ```
+
+- `append` - 这个action将会把参数以一个list的形式存储，每个参数值都会追加到这个list中。如果需要让选项可以多次指定这个action就很有用：
+
+    ```python
+    >>> parser = argparse.ArgumentParser()
+    >>> parser.add_argument('--foo', action='append')
+    >>> parser.parse_args('--foo 1 --foo 2'.split())
+    Namespace(foo=['1', '2'])
+    ```
+
+- `append_const` - 这个action将会把参数以一个list的形式存储，每次发现参数后都会把`const`的值追加到list中。这个action一般在需要把多个参数存储在同一个list的时候很有用：
+
+    ```python
+    >>> parser = argparse.ArgumentParser()
+    >>> parser.add_argument('--str', dest='types', action='append_const', const=str)
+    >>> parser.add_argument('--int', dest='types', action='append_const', const=int)
+    >>> parser.parse_args('--str --int'.split())
+    Namespace(types=[<class 'str'>, <class 'int'>])
+    ```
+
+- `count` - 这个action将会计数参数出现的次数。比如，可以用来增加详细的程度:
+
+    ```python
+    >>> parser = argparse.ArgumentParser()
+    >>> parser.add_argument('--verbose', '-v', action='count')
+    >>> parser.parse_args(['-vvv'])
+    Namespace(verbose=3)
+    ```
+
+- `help` - 在帮助文本中显示该参数的帮助消息。默认会自动加入一个帮助文本信息。
+
+- `version` - 通过`version`参数指定一个版本号，在调用参数时会打印这个版本信息。
+
+    ```python
+    >>> import argparse
+    >>> parser = argparse.ArgumentParser(prog='PROG')
+    >>> parser.add_argument('--version', action='version', version='%(prog)s 2.0')
+    >>> parser.parse_args(['--version'])
+    PROG 2.0
+    ```
+
+你也可以通过实现相同的API接口或者继承`Action`类来创建你的自定义action。推荐的方式是继承`Action`，重写`__call__`方法和`__init__`方法。
+
+下面是一个自定义action的例子:
+
+```python
+>>> class FooAction(argparse.Action):
+...     def __init__(self, option_strings, dest, nargs=None, **kwargs):
+...         if nargs is not None:
+...             raise ValueError('nargs not allowed')
+...         super(Action, self).__init__(option_strings, dest, **kwargs)
+...     def __call__(self, parser, namespace, values, option_string=None):
+...         print("%r %r %r" %(namespace, values, option_string))
+...         setattr(namespace, self.dest, values)
+...
+>>> parser = argparse.ArgumentParser()
+>>> parser.add_argument('--foo', action=FooAction)
+>>> parser.add_argument('bar', action=FooAction)
+>>> args = parser.parse_args('1 --foo 2'.split())
+Namespace(bar=None, foo=None) '1' None
+Namespace(bar='1', foo=None) '2' '--foo'
+>>> args
+Namespace(bar='1', foo='2') '2' '--foo'
+```
+
+#### nargs
+
+pass
