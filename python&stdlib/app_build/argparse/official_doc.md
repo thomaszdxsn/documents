@@ -660,4 +660,54 @@ Namespace(bar='1', foo='2') '2' '--foo'
 
 #### nargs
 
-pass
+`ArgumentParser`通常将一个命令行参数和一个action相关联。`nargs`可以设置不同数量的命令行参数和单个action相关联。支持的参数值包括:
+
+- `N`(一个整数)
+
+    将会从命令行中收集`N`个数量的参数值。例如:
+
+    ```python
+    >>> parser = argparse.ArgumentParser()
+    >>> parser.add_argument('--foo', nargs=2)
+    >>> parser.add_argument('bar', nargs=1)
+    >>> parser.parse_args('c --foo a b'.split())
+    Namespace(bar=['c'], foo=['a', 'b'])
+    ```
+
+    注意`nargs=1`生成了只包含一个值的list。这个行为和默认行为不同，默认不会生成list。
+
+- `?`
+
+    消耗0或1个命令行参数值，如果没有命令行参数，那么就使用`default`定义的值--注意对于选项参数，可能会发生出现有选项字符串但是没有尾随命令行参数的情况。在这种情况下，将会使用`const`中的值。下面是一些例子:
+
+    ```python
+    >>> parser = argparse.ArgumentParser()
+    >>> parser.add_argument('--foo', nargs='?', const='c', default='d')
+    >>> parser.add_argument('bar', nargs='?', default='d')
+    >>> parser.parse_args(['XX', '--foo', 'YY'])
+    Namespace(bar='XX', foo='YY')
+    >>> parser.parse_args(['XX', '--foo'])
+    Namespace(bar='XX', foo='c')
+    >>> parser.parse_args([])
+    Namespace(bar='d', foo='d')
+    ```
+
+    `nargs=‘?’`的一个常见的使用场景就是允许对文件的输入/输出可选:
+
+    ```python
+    >>> parser = argparse.ArgumentParser()
+    >>> parser.add_argument('infile', nargs='?', type=argparse.FileType('r'), 
+    ...                     default=sys.stdin)
+    >>> parser.add_argument('outfile', nargs='?', type=argparse.FileType('w'), 
+    ...                     default=sys.stdout)
+    >>> parser.parse_args(['input.txt', 'output.txt'])
+    Namespace(infile=<_io.TextIOWrapper name='input.txt' encoding='UTF-8'>,
+          outfile=<_io.TextIOWrapper name='output.txt' encoding='UTF-8'>)
+    >>> parser.parse_args([])
+    Namespace(infile=<_io.TextIOWrapper name='<stdin>' encoding='UTF-8'>,
+          outfile=<_io.TextIOWrapper name='<stdout>' encoding='UTF-8'>)
+    ```
+
+- `*`
+
+    pass
