@@ -710,4 +710,99 @@ Namespace(bar='1', foo='2') '2' '--foo'
 
 - `*`
 
-    pass
+    所有在命令行中出现的值都会收集到一个list中。可以包含0个或多个值。例如:
+
+    ```python
+    >>> parser = argparse.ArgumentParser()
+    >>> parser.add_argument('--foo', nargs='*')
+    >>> parser.add_argument('--bar', nargs='*')
+    >>> parser.add_argument('baz', nargs='*')
+    >>> parser.parse_args('a b --foo x y --bar 1 2'.split())
+    Namespace(bar=['1', '2'], baz=['a', 'b'], foo=['x', 'y'])
+    ```
+
+- `+`
+
+    和`*`类似。但是保证最少要有一个参数值，否者会抛出错误消息：
+
+    ```python
+    >>> parser = argparse.ArgumentParser()
+    >>> parser.add_argument('foo', nargs='+')
+    >>> parser.parse_args(['a', 'b'])
+    Namespace(foo=['a', 'b'])
+    >>> parser.parse_args([])
+    usage: PROG [-h] foo [foo ...]
+    PROG: error: too few arguments
+    ```
+    
+- `argparse.REMINDER`
+
+    所有**剩余**的参数都会收集到一个list中.通常用于一个命令行需要分发参数给另一个命令行参数的情况:
+
+    ```python
+    >>> parser = argparse.ArgumentParser()
+    >>> parser.add_argument('--foo')
+    >>> parser.add_argument('command')
+    >>> parser.add_argument('args', nargs=argparse.REMINDER)
+    >>> print(parser.parse_args('--foo B cmd --arg1 XX ZZ'.split()))
+    Namespace(args=['--arg1', 'XX', 'ZZ'], command='cmd', foo='B')
+    ```
+
+如果没有使用`nargs`，那么参数值的消耗数量取决于`action`。一般情况下，每个参数会消耗一个参数值。
+
+#### const
+
+`add_argument()`的`const`参数用来持有一个常量值。它不会从命令行中读取，但是有几个action都需要这个`const`参数。两个常见的场景是：
+
+- 当`add_argument()`加入了`action='store_const`或者`action='append_const'`的时候。这些action都会把`const`的值加入到`parse_args()`返回的属性中。
+- 当`add_argument()`指定了选项字符串(如`-f/--foo`)以及`nargs='?'`的时候。可以创建一个选项参数，接受0或1个数量的参数值。当解析时发现有选项字符串但是没有参数值的时候，会使用`const`的值来替代。
+
+对于`store_const`和`append_const`，必须提供`const`参数。其它情况默认`const=None`。
+
+#### default
+
+除了所有的选项参数可以在命令行不输入外，一些位置参数也可以选择不输入。`add_argument()`有一个关键字参数`default`，它的默认值是`None`，指定一个值以后它可以用来代表命令行没有参数值的情况。对于选项参数，在命令行没有出现选项字符串的时候会使用`default`：
+
+```python
+>>> parser = argparse.ArgumentParser()
+>>> parser.add_argument('--foo', default=42)
+>>> parser.parse_args(['--foo', '2'])
+Namespace(foo='2')
+>>> parser.parse_args([])
+Namespace(foo=42)
+```
+
+如果`default`是一个字符串，解析器将会解析这个值。特别是，在将它加入到命名空间之前，会使用`type`参数来把这个字符串转换。如果不是字符串的话就直接使用它：
+
+```python
+>>> parser = argparse.ArgumentParser()
+>>> parser.add_argument('--length', default='10', type=int)
+>>> parser.add_argument('--width', default=10.5, type=int)
+>>> parser.parse_args()
+Namespace(length=10, width=10.5)
+```
+
+对于带有`nargs`为`?`或者`*`的位置参数，在没有参数值的情况下也会使用`default`:
+
+```python
+>>> parser = argparse.ArgumentParser()
+>>> parser.add_argument('foo', nargs='?', default=42)
+>>> parser.parse_args(['a'])
+Namespace(foo='a')
+>>> parser.parse_args([])
+Namespace(foo=42)
+```
+
+如果使用`default=argparse.SUPPRESS`，如果没有参数值，也不会为命名空间加入该属性:
+
+```python
+>>> parser = argparse.ArgumentParser()
+>>> parser.add_argument('--foo', default=argparse.SUPPRESS)
+>>> parser.parse_args()
+Namespace()
+>>> parser.parse_args(['--foo', '1'])
+Namespace(foo='1')
+```
+
+#### type
+
