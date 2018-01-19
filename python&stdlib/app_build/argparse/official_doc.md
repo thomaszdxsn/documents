@@ -806,3 +806,157 @@ Namespace(foo='1')
 
 #### type
 
+默认情况下，`ArgumentParser`会将命令行参数以简单的字符串来读取。不过，很多时候想要让这些命令汗支付转换为其它类型，比如`float`或者`int`。`add_argument()`的`type`关键字参数允许加入类型检查和转换。一般的内置的类型和函数都可以用作`type`：
+
+```python
+>>> parser = argparse.ArgumentParser()
+>>> parser.add_argument('foo', type=int)
+>>> parser.add_argument('bar', type=open)
+>>> parser.parse_args("2 temp.txt".split())
+Namespace(bar=<_io.TextIOWrapper name='temp.txt' encoding='UTF-8'>, foo=2)
+```
+
+为了适用于不同类型的文件(模式)，`argparse`模块提供了一个工厂`FileType`，它接受`open()`函数的`mode=, buffsize=, encoding=, errors=`这些参数。例如，`FileType('w')`可以创建一个可写的文件句柄(#!可以通过partial来实现):
+
+```python
+>>> parser = argparse.ArgumentParser()
+>>> parser.add_argument('bar', type=argparse.FileType('w'))
+>>> parser.parse_args(['out.txt'])
+Namespace(bar=<_io.TextIOWrapper name='out.txt' encoding='UTF-8'>)
+```
+
+`type=`关键字参数可以接受可调用对象，这个对象接受一个字符串参数并返回一个转换后的值：
+
+```python
+>>> def perfect_square(string):
+...     value = int(string)
+...     sqrt = math.sqrt(value)
+...     if sqrt != int(sqrt):
+...         msg = "%r is not a perfect square" % string
+...         raise argparse.ArgumentTypeError(msg)
+...     return value
+...
+>>> parser = argparse.ArgumentParser(prog='PROG')
+>>> parser.add_argument('foo', type=perfect_square)
+>>> parser.parse_args(['9'])
+Namespace(foo=9)
+>>> parser.parse_args(['7'])
+usage: PROG [-h] foo
+PROG: error: argument foo: '7' is not a perfect square
+```
+
+`choices`可以让类型检查限制在一个范围内:
+
+```python
+>>> parser = argparse.ArgumentParser(prog='PROG')
+>>> parser.add_argument('foo', type=int, choices=(5, 10))
+>>> parser.parse_args(['7'])
+Namespace(foo=7)
+>>> parser.parse_args(['11'])
+usage: PROG [-h] {5,6,7,8,9}
+PROG: error: argument foo: invalid choice: 11 (choose from 5, 6, 7, 8, 9)
+```
+
+#### choices
+
+一些命令行参数的值可能需要限定一个范围。可以通过为`add_argument()`的`choices`参数传入一个容器对象来实现。当命令行被解析后，参数值会被检查，如果参数值没有列于可接受值list之中则会抛出错误:
+
+```python
+>>> parser = argparse.ArgumentParser(prog='game.py')
+>>> parser.add_argument('move', choices=['rock', 'paper', 'scissors'])
+>>> parser.parse_args(['rock'])
+Namespace(move='rock')
+>>> parser.parse_args(['fire'])
+usage: game.py [-h] {rock,paper,scissors}
+game.py: error: argument move: invalid choice: 'fire' (choose from 'rock',
+'paper', 'scissors')
+```
+
+注意`choices`检查会在`type`类型转换之后进行，所以`choices`容器中的对象应该符合`type`的类型：
+
+```python
+>>> parser = argparse.ArgumentParser(prog='doors.py')
+>>> parser.add_argument('door', type=int, choices=range(1, 4))
+>>> print(parser.parse_args(['3']))
+Namespace(door=3)
+>>> parser.parse_args(['4'])
+usage: doors.py [-h] {1,2,3}
+doors.py: error: argument door: invalid choice: 4 (choose from 1, 2, 3)
+```
+
+任何支持`in`操作符(`__contain__`方法)的对象都可以传入到`choices`中，所以`dict`，`set`，自定义容器都是可以的。
+
+#### required
+
+一般来说，`argparse`模块假定`-f`和`--bar`这些flag为可选参数，它们是可以在命令行中忽略的。想要让这个可选参数变为必填，可以使用关键字参数`required=`:
+
+```python
+>>> parser = argparse.ArgumentParser()
+>>> parser.add_argument('--foo', required=True)
+>>> parser.parse_args(['--foo', 'BAR'])
+Namespace(foo='BAR')
+>>> parser.parse_args([])
+usage: argparse.py [-h] [--foo FOO]
+argparse.py: error: option --foo is required
+```
+
+就像例子中显示的这样，如果一个可选参数标记为`required`，那么这个参数就是必填的，否则就会报告错误。
+
+> 注意
+>
+>> 必填option一般认为不是一个好的方式，因为用户一般都会认为option是可选的，所以应该尽可能避免使用这个参数。
+
+#### help
+
+`help`是一个字符串，包含参数的简短描述。当一个用户请求帮助时(通常使用`-h`或者`--help`)，每个参数都会显示它自己的`help`:
+
+```python
+>>> parser = argparser.ArgumentParser(prog='frobble')
+>>> parser.add_argument('--foo', action='store_true',
+...                     help='foo the bars before forbbing')
+>>> parser.add_argument('bar', nargs='+',
+...                     help='one of the bars to forbbled')
+>>> parser.parse_args(['-h'])
+usage: frobble [-h] [--foo] bar [bar ...]
+
+positional arguments:
+ bar     one of the bars to be frobbled
+
+optional arguments:
+ -h, --help  show this help message and exit
+ --foo   foo the bars before frobbling
+```
+
+`help`参数可以包含多个格式化标识符，显示程序名称或者参数的`default`。内置的格式化标识符包括程序名称(`%(prog)s`)和`add_argument()`中的大多数关键字参数，比如`%(default)s`，`%(type)s`，等等：
+
+```python
+>>> parser = argparse.ArgumentParser(prog='frobble')
+>>> parser.add_argument('bar', nargs='?', type=int, default=42,
+...                     help='the bar to %(prog)s (default: %(default)s)')
+>>> parser.print_help()
+usage: frobble [-h] [bar]
+
+positional arguments:
+ bar     the bar to frobble (default: 42)
+
+optional arguments:
+ -h, --help  show this help message and exit
+```
+
+由于`help`字符串支持`%`格式化方式，如果你想要单独使用`%`，必须使用`%%`来转义。
+
+`argparse`允许对特定的option不显示其相应的help，通过对`help`传入`argparse.SUPPRESS`即可：
+
+```python
+>>> parser = argparse.ArgumentParser(prog='frobble')
+>>> parser.add_argument('--foo', help=argparser.SUPPRESS)
+>>> parsre.print_help()
+usage: frobble [-h]
+
+optional arguments:
+  -h, --help  show this help message and exit
+```
+
+#### metavar
+
+pass
