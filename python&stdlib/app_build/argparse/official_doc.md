@@ -959,4 +959,92 @@ optional arguments:
 
 #### metavar
 
-pass
+当`ArgumentParser`生成help消息时，它需要某些方式来引用每个期待的参数。默认情况下，`ArgumentParser`使用`dest`值作为每个对象的“名称”。默认情况下，对于位置参数，直接使用`dest`的值，对于可选参数，使用大写形式的`dest`值。所以，对于单个位置参数`dest='bar'`将会以`bar`来引用。可选参数`--foo`以`FOO`来引用。例子：
+
+```python
+>>> parser = argparse.ArgumentParser()
+>>> parser.add_argument('--foo')
+>>> parser.add_argument('bar')
+>>> parser.parse_args('X --foo Y'.split())
+Namespace(bar='X', foo='Y')
+>>> parser.print_help()
+usage:  [-h] [--foo FOO] bar
+
+positional arguments:
+ bar
+
+optional arguments:
+ -h, --help  show this help message and exit
+ --foo FOO
+```
+
+也可以通过`metavar`来直接指定名称：
+
+```python
+>>> parser = argparse.ArgumentParser()
+>>> parser.add_argument('--foo', metavar='YYY')
+>>> parser.add_argument('bar', metavar='XXX')
+>>> parser.parse_args('X --foo Y'.split())
+Namespace(bar='X', foo='Y')
+>>> parser.print_help()
+usage:  [-h] [--foo YYY] XXX
+
+positional arguments:
+ XXX
+
+optional arguments:
+ -h, --help  show this help message and exit
+ --foo YYY
+```
+
+注意`metavar`只改变**显示的名称** -- `parse_args()`返回对象中的属性名称仍然由`dest`参数来指定。
+
+不同类型的`nargs`可能会让`metavar`使用多次。也可以为`metavar`指定一个元组：
+
+```python
+>>> parser = argparse.ArgumentParser(prog='PROG')
+>>> parser.add_argument("-x", nargs=2)
+>>> parser.add_argument("--foo", nargs=2, metavar=("bar", "baz"))
+>>> parser.print_help()
+usage: PROG [-h] [-x X X] [--foo bar baz]
+
+optional arguments:
+ -h, --help     show this help message and exit
+ -x X X
+ --foo bar baz
+```
+
+#### dest
+
+多数`ArgumentParser`的action都会为`parse_args()`返回的对象加入一些属性。属性的名称取决于`add_argument()`的关键字参数`dest`。对于位置参数的action，`dest`一般默认由`add_argument()`的第一个参数决定：
+
+```python
+>>> parser = argparse.ArgumentParser()
+>>> parser.add_argument('bar')
+>>> parser.parse_args(['XXX'])
+Namespace(bar='XXX')
+```
+
+对于可选参数的action，一般使用`dest`参数来作为属性名。`ArgumentParser`会提取第一个长选项字符串，去除它的`--`，然后将它作为`dest`的值。如果没有提供长选项字符串，就使用第一个短选项字符串(去除`-`)。为了确保是一个合法的属性名称，字符串中的`-`都会被替换为`_`。下面的例子可以说明这一切：
+
+```python
+>>> parser = argparse.ArgumentParser()
+>>> parser.add_argument('-f', '--foo-bar', '--foo')
+>>> parser.add_argument('-x', '-y')
+>>> parser.parse_args('-f 1 -x 2'.split())
+Namespace(foo_bar='1', x='2')
+>>> parser.parse_args('--foo 1 -y 2'.split())
+Namespace(foo_bar='1', x='2')
+```
+
+`dest`关键字参数允许你提供自定义的属性名称：
+
+```python
+>>> parser = argparse.ArgumentParser()
+>>> parser.add_argument('--foo', dest='bar')
+>>> parser.parse_args('--foo XXX'.split())
+Namespace(bar='XXX')
+```
+
+#### Action classes
+
