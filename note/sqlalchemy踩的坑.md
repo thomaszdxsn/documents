@@ -32,11 +32,11 @@
  
 ## 参考
 
-- \[1\]: [https://www.cnblogs.com/zzcflying/p/4285691.html](https://www.cnblogs.com/zzcflying/p/4285691.html)
-- \[2\]: [http://blog.csdn.net/bytxl/article/details/30460153](http://blog.csdn.net/bytxl/article/details/30460153)
-- \[3\]: [http://docs.sqlalchemy.org/en/latest/core/pooling.html#pool-events](http://docs.sqlalchemy.org/en/latest/core/pooling.html#pool-events)
-- \[4\]: [https://stackoverflow.com/questions/6471549/avoiding-mysql-server-has-gone-away-on-infrequently-used-python-flask-server](https://stackoverflow.com/questions/6471549/avoiding-mysql-server-has-gone-away-on-infrequently-used-python-flask-server)
-
-- [SQLAlchemy数据库连接池排查记录](http://amitmatani.com/scoping-sqlalchemys-session-while-using-tornado-dot-gen)
-- 有一个博客作者提到自己通过monkey patch实现了tornado和sqlalchemy的集成,
-但是没有具体的实现代码[链接](http://amitmatani.com/scoping-sqlalchemys-session-while-using-tornado-dot-gen)
+-- | --
+-- | -- 
+\[1\] | [https://www.cnblogs.com/zzcflying/p/4285691.html](https://www.cnblogs.com/zzcflying/p/4285691.html)
+\[2\] | [http://blog.csdn.net/bytxl/article/details/30460153](http://blog.csdn.net/bytxl/article/details/30460153)
+ \[3\] | [http://docs.sqlalchemy.org/en/latest/core/pooling.html#pool-events](http://docs.sqlalchemy.org/en/latest/core/pooling.html#pool-events)
+\[4\] | [https://stackoverflow.com/questions/6471549/avoiding-mysql-server-has-gone-away-on-infrequently-used-python-flask-server](https://stackoverflow.com/questions/6471549/avoiding-mysql-server-has-gone-away-on-infrequently-used-python-flask-server)
+\[5\] | [SQLAlchemy数据库连接池排查记录](http://amitmatani.com/scoping-sqlalchemys-session-while-using-tornado-dot-gen)
+\[6\] |  有一个博客作者提到自己通过monkey patch实现了tornado和sqlalchemy的集成,但是没有具体的实现代码[链接](http://amitmatani.com/scoping-sqlalchemys-session-while-using-tornado-dot-gen)

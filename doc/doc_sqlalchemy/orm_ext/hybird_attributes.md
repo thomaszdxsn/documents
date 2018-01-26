@@ -259,7 +259,7 @@ class User(Base):
             account = Account(owner=self)
         else:
             account = self.accounts[0]
-        accounts.balance = value
+        account.balance = value
 
     @balance.expression
     def balance(cls):
