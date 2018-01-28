@@ -613,3 +613,596 @@ InvalidRequestError: Ambiguous column name 'id' in result set column description
 
 ## Using Aliases
 
+在SQLAlchemy中，任何`Table`，`select()`构造或其它可selectable对象，都可以使用`FromClause.alias()`来将它转换为一个alias，返回一个`Alias`对象。举个例子来说，假定用户`jack`有两个特殊的email地址。我们怎么依靠这两个地址来定位jack？我们需要join两次`addresses`表：
+
+```python
+>>> a1 = addresses.alias()
+>>> a2 = addresses.alias()
+>>> s = select([users]).\
+...         where(and_(
+...             users.c.id == a1.c.user_id,
+...             users.c.id == a2.c.user_id,
+...             a1.c.email_address == 'jack@msn.com',
+...             a2.c.email_address == 'jack@yahoo.com',
+...         ))
+>>> conn.execute(s).fetchall()
+[(1, u'jack', u'Jack Jones')]
+```
+
+注意`Alias`构造器在最终的SQL中生成了`addresses_1`和`addresses_2`这两个名称。生成的名称取决于alias在SQL语句中的位置。也就是说，如果创建的query只使用了`a2`，那么生成的名称就会是`addresses_1`。
+
+任何selectable对象都可以被alias。下面例子中`correlate(None)`可以间接的避免让SQLAlchemy把内部的`users`和外部那个相关联：
+
+```python
+>>> a1 = s.correlate(None).alias()
+>>> s = select([users.c.name]).where(users.c.id == a1.c.id)
+>>> conn.execute(s).fetchall()
+[(u'jack',)]
+```
+
+## Using Joins
+
+SELECT的一个基石就是JOIN表达式：
+
+```python
+>>> print(users.join(addresses))
+users JOIN addresses ON users.id = addresses.user_id
+```
+
+敏感的人可能会发现，SQLAlchemy可以自动JOIN两个表！JOIN中的ON字句会自动根据表之间的外键关系来生成。
+
+当然，你可以使用任意的表达式来JOIN，比如你想要把users JOIN所有在邮件地址中包含用户名的addresses：
+
+```python
+>>> print(users.join(addresses,
+...           addresses.c.email_addresses.like(users.c.name + '%')
+...           )
+... )
+users JOIN addresses ON addresses.email_address LIKE users.name || :name_1
+```
+
+当我们需要select一个JOIN语句，可以使用`select_from()`方法:
+
+```python
+>>> s = select([users.c.fullname]).select_from(
+...      users.join(addresses,
+...        addresses.c.email_address.like(users.c.name + '%'))
+...      )
+>>> conn.execute(s).fetchall()
+[(u'Jack Jones',), (u'Jack Jones',), (u'Wendy Williams',)]
+```
+
+`outerjoin()`创建了`LEFT OUTER JOIN`语句，使用它的方式和`join()`相同:
+
+```python
+>>> s = select([users.c.fullname]).select_from(users.outerjoin(addresses))
+>>> print(s)
+SELECT users.fullname
+    FROM users
+    LEFT OUTER JOIN addresses ON users.id = addresses.user_id
+```
+
+## Everything Else
+
+### Bind Parameter Objects
+
+`bindparam()`可以根据给定的名称为你创建一个绑定参数：
+
+```python
+>>> from sqlalchemy.sql import bindparam
+>>> s = users.select(users.c.name == bindparam('username'))
+>>> conn.execute(s, username='wendy').fetchall()
+[(2, u'wendy', u'Wendy Williams')]
+```
+
+`bindparam()`另一个重要的方面是可以赋值类型：
+
+```python
+>>> s = users.select(users.c.name.like(bindparam('username', type_=String) + text ("'%'")))
+>>> conn.execute(s, username='wendy').fetchall()
+[(2, u'wendy', u'Wendy Williams')]
+```
+
+同名的`bindparam()`可以被使用多次，不过只需要在传入时传入一个值即可:
+
+```python
+>>> s = select([users, addresses]).\
+...     where(
+...       or_(
+...         users.c.name.like(
+...           bindparam('name', type_=String) + text("'%'")),
+...         addresses.c.email_address.like(
+...           bindparam('name', type_=String) + text("'@%'")  
+...       )
+...     ).\
+...     select_from(users.outerjoin(addresses)).\
+...     order_by(addresses.c.id)
+>>> conn.execute(s, name='jack').fetchall()
+[(1, u'jack', u'Jack Jones', 1, 1, u'jack@yahoo.com'), (1, u'jack', u'Jack Jones', 2, 1, u'jack@msn.com')]
+```
+
+### Functions
+
+使用`func`这个接口来提供SQL函数：
+
+```python
+>>> from sqlalchemy.sql import func
+>>> print(func.now())
+now()
+
+>>> print(func.concat('x', 'y'))
+concat(:concat_1, :concat_2)
+```
+
+其实生成的任何SQL函数都是根据你选择的单词来创建的：
+
+```python
+>>> print(func.xyz_my_goofy_function())
+xyz_my_goofy_function()
+```
+
+某些特殊的函数可能并不会生成括号, 比如CURRENT_TIMESTAP:
+
+```python
+>>> print(func.current_timestamp())
+CURRENT_TIMESTAMP
+```
+
+下面例子中的结果函数`scalar()`，可以获取结果中的首个row，这个函数不在此章的讨论范围中：
+
+```python
+>>> conn.execute(
+...     select([
+...             func.max(addresses.c.email_address, type_=String).
+...                 label('maxmail')
+...            ])
+...     ).scalar()
+
+SELECT max(addresses.email_address) AS maxemail
+FROM addresses
+()
+
+u'www@www.org'
+```
+
+### Window Functions
+
+任何`FunctionElement`，包含`func`生存的函数，都可以转换为“开窗函数"（window function），可以使用`FunctionElement.over()`来加入OVER字句:
+
+```python
+>>> s = select([
+...         users.c.id,
+...         func.row_number().over(order_by=users.c.name)
+...     ])
+>>> print(s)
+SELECT users.id, row_number() OVER (ORDER BY users.name) AS anon_1
+FROM users
+```
+
+TODO: 了解开窗函数
+
+### Unions and Other Set Operations
+
+Union可以有两种方式，UNION和UNION ALL，可以通过模块级函数`union()`和`union_all()`来使用：
+
+```python
+>>> from sqlalchemy.sql import union
+>>> u = union(
+...     addresses.select().
+...         where(addresses.c.email_address == 'foo@bar.com'),
+...     addresses.select().
+...         where(addresses.c.email_addess.like('%@yahoo.com')),
+... ).order_by(address.c.email_address)    
+
+>>> conn.execute(u).fetchall()
+[(1, 1, u'jack@yahoo.com')]
+```
+
+其它的函数也一样，包括`intersect()`, `intersect_all()`, `except_()`和`except_all()`:
+
+```python
+>>> from sqlalchemy.sql import except_
+>>> u = except_(
+...     addresses.select().
+...         where(addresses.c.email_address.like('%@%.com')),
+...     addresses.select().
+...         where(addresses.c.email_address.like('%@msn.com'))
+... )
+
+>>> conn.execute(u).fetchall()
+[(1, 1, u'jack@yahoo.com'), (4, 2, u'wendy@aol.com')]
+```
+
+### Scalar Selects
+
+`select()`构造器可以通过`as_scalar()`或者`label()`方法将它修改为一个列表达式:
+
+```python
+>>> stmt = select([func.count(addresses.c.id)]).\
+...             where(users.c.id == addresses.c.user_id).\
+...             as_scalar()
+```
+
+上面的构造`stmt`现在是一个`ScalarSelect`对象，不再是`FromClause`结构的一部分了；我们可以将它用于`select()`中：
+
+```python
+>>> conn.execute(select([users.c.name, stmt])).fetchall()
+
+SELECT users.name, (SELECT count(addresses.id) AS count_1
+FROM addresses
+WHERE users.id = addresses.user_id) AS anon_1
+FROM users
+()
+
+[(u'jack', 2), (u'wendy', 2)]
+```
+
+想要使用非匿名形式的列名，我们可以使用`SelectBase.label()`来替代:
+
+```python
+>>> stmt = select([func.count(addresses.c.id)]).\
+...             where(users.c.id == addresses.c.user_id).\
+...             label('address_count')
+>>> conn.execute(select([user.c.name, stmt])).fetchall()
+
+SELECT users.name, (SELECT count(addresses.id) AS count_1
+FROM addresses
+WHERE users.id = addresses.user_id) AS address_count
+FROM users
+()
+
+[(u'jack', 2), (u'wendy', 2)]
+```
+
+### Correlated Subqueries
+
+请注意**Scalar Selects**中的例子，内嵌FROM子句中并不包含`users`表。这是因为SQLAlchemy自动关联FORM字句和它的闭包query：
+
+```python
+>>> stmt = select([addresses.c.user_id]).\
+...         where(addresses.c.user_id == users.c.id).\
+...         where(addresses.c.email_address == 'jack@yahoo.com')
+>>> enclosing_stmt = select([users.c.name]).where(users.c.id == stmt)
+>>> conn.execute(enclosing_stmt).fetchall()
+
+SELECT users.name
+FROM users
+WHERE users.id = (SELECT addresses.user_id
+    FROM addresses
+    WHERE addresses.user_id = users.id
+    AND addresses.email_address = ?)
+('jack@yahoo.com',)
+
+[(u'jack',)]
+```
+
+自动相关联大多数情况很好用，但是你也可以手动控制它。我们可以使用`.correlate()`方法来指定我们想要关联的FORM字句：
+
+```python
+>>> stmt = select([users.c.id]).\
+...          where(users.c.id == addresses.c.user_id).\
+...          where(users.c.name == 'jack').\
+...          correlate(addresses)
+>>> enclosing_stmt = select(
+...         [users.c.name, addresses.c.email_address]).\
+...     select_from(users.join(addresses)).\
+...     where(users.c.id == stmt)
+>>> conn.execute(enclosing_stmt).fetchall()
+
+SELECT users.name, addresses.email_address
+ FROM users JOIN addresses ON users.id = addresses.user_id
+ WHERE users.id = (SELECT users.id
+ FROM users
+ WHERE users.id = addresses.user_id AND users.name = ?)
+ ('jack',)
+
+[(u'jack', u'jack@yahoo.com'), (u'jack', u'jack@msn.com')]
+```
+
+在传入`None`作为参数后，可以完全禁用语句的相关联(correlate):
+
+```python
+>>> stmt = select([users.c.id]).\
+...         where(users.c.name == 'wendy').
+...         correlate(None)
+>>> enclosing_stmt = select([users.c.name]).\
+...     where(users.c.id == stmt)
+>>> conn.execute(enclosing_stmt).fetchall()
+
+SELECT users.name
+FROM users
+WHERE users.id = (SELECT users.id
+  FROM users
+  WHERE users.name = ?)
+('wendy',)
+
+[(u'wendy',)]
+```
+
+TODO: 需要继续了解Correlate，暂时没有时间
+
+### Ordering, Grouping, Limiting, Offset...ing...
+
+可以通过将列表达式传入到`order_by()`方法来排序：
+
+```python
+>>> stmt = select([users.c.name]).order_by(users.c.name)
+>>> conn.execute(stmt).fetchall()
+
+SELECT users.name
+FROM users ORDER BY users.name
+()
+
+[(u'jack',), (u'wendy',)]
+```
+
+升序或降序都可以通过`asc()`和`desc()`修饰符来控制:
+
+```python
+>>> stmt = select([users.c.name]).order_by(users.c.name.desc())
+>>> conn.execute(stmt).fetchall()
+
+SELECT users.name
+FROM users ORDER BY users.name DESC
+()
+
+[(u'wendy',), (u'jack',)]
+```
+
+`group_by()`常常和聚集函数一起来分组：
+
+```python
+>>> stmt = select([users.c.name, func.count(addresses.c.id)]).\
+...             select_from(users.join(addresses)).\
+...             group_by(users.c.name)
+>>> conn.execute(stmt).fetchall()
+
+SELECT users.name, count(addresses.id) AS count_1
+FROM users JOIN addresses
+    ON users.id = addresses.user_id
+GROUP BY users.name
+()
+
+[(u'jack', 2), (u'wendy', 2)]
+```
+
+在使用GROUP BY以后，可以使用`.having()`来进行过滤:
+
+```python
+>>> stmt = select([users.c.name, func.count(addresses.c.id)]).\
+...             select_from(users.join(addresses)).\
+...             group_by(users.c.name).\
+...             having(func.length(users.c.name) > 4)
+>>> conn.execute(stmt).fetchall()
+
+SELECT users.name, count(addresses.id) AS count_1
+FROM users JOIN addresses
+    ON users.id = addresses.user_id
+GROUP BY users.name
+HAVING length(users.name) > ?
+(4,)
+
+[(u'wendy', 2)]
+```
+
+很多时候想要去除重复，请使用`.distinct()`修饰符：
+
+```python
+>>> stmt = select([users.c.name]).\
+...             where(addresses.c.email_address.
+...                    contains(users.c.name)).\
+...             distinct()
+>>> conn.execute(stmt).fetchall()
+
+SELECT DISTINCT users.name
+FROM users, addresses
+WHERE (addresses.email_address LIKE '%' || users.name || '%')
+()
+
+[(u'jack',), (u'wendy',)]
+```
+
+LIMIT和OFFSET都有对应的方法：
+
+```python
+>>> stmt = select([users.c.name, addresses.c.email_address]).\
+...             select_from(users.join(addresses)).\
+...             limit(1).offset(1)
+>>> conn.execute(stmt).fetchall()
+
+SELECT users.name, addresses.email_address
+FROM users JOIN addresses ON users.id = addresses.user_id
+ LIMIT ? OFFSET ?
+(1, 1)
+
+[(u'jack', u'jack@msn.com')]
+```
+
+## Inserts, Updates and Deletes
+
+`values()`方法可以将任意的列表达式作为值：
+
+```python
+>>> stmt = users.update().\
+...         values(fullname='Fullname: ' + users.c.name)
+>>> conn.execute(stmt)
+
+UPDATE users SET fullname=(? || users.name)
+('Fullname: ',)
+COMMIT
+
+<sqlalchemy.engine.result.ResultProxy object at 0x...>
+```
+
+当在一个"execute many"上下文中执行`insert()`或`update()`时，我们希望插入绑定参数：
+
+```python
+>>> stmt = users.insert().\
+...         values(name=bindparam("_name") + " .. name")
+>>> conn.execute(stmt, [
+...        {'id':4, '_name':'name1'},
+...        {'id':5, '_name':'name2'},
+...        {'id':6, '_name':'name3'},
+... ])
+
+INSERT INTO users (id, name) VALUES (?, (? || ?))
+((4, 'name1', ' .. name'), (5, 'name2', ' .. name'), (6, 'name3', ' .. name'))
+COMMIT
+<sqlalchemy.engine.result.ResultProxy object at 0x...>
+```
+
+`.update()`和`.insert()`很类似，除了它还加入WHERE字句:
+
+```python
+>>> stmt = users.update().\
+...             where(users.c.name == 'jack').\
+...             values(name='ed')
+
+>>> conn.execute(stmt)
+
+UPDATE users SET name=? WHERE users.name = ?
+('ed', 'jack')
+COMMIT
+
+<sqlalchemy.engine.result.ResultProxy object at 0x...>
+```
+
+在"excutemany"上下文中，也可以使用`bindparam()`来加入绑定参数:
+
+```python
+>>> stmt = users.update().\
+...         where(users.c.name == bindparam('oldname')).\
+...         values(name=bindparam('newname'))
+>>> conn.execute(stmt, [
+...     {'oldname':'jack', 'newname':'ed'},
+...     {'oldname':'wendy', 'newname':'mary'},
+...     {'oldname':'jim', 'newname':'jake'},
+... ])
+
+UPDATE users SET name=? WHERE users.name = ?
+(('ed', 'jack'), ('mary', 'wendy'), ('jake', 'jim'))
+COMMIT
+
+<sqlalchemy.engine.result.ResultProxy object at 0x...>
+```
+
+### Correlated Updates
+
+correlated update允许我们使用另一个表中(或同一个表)的内容来更新:
+
+```python
+>>> stmt = select([addresses.c.email_address]).\
+...             where(addresses.c.user_id == users.c.id).\
+...             limit(1)
+>>> conn.execute(users.update().values(fullname=stmt))
+
+UPDATE users SET fullname=(SELECT addresses.email_address
+    FROM addresses
+    WHERE addresses.user_id = users.id
+    LIMIT ? OFFSET ?)
+(1, 0)
+COMMIT
+
+<sqlalchemy.engine.result.ResultProxy object at 0x...>
+```
+
+### Multiple Table Updates
+
+复杂的UPDATE可以基于WHERE指定：
+
+```python
+stmt = users.update().\
+        values(name='ed wood').\
+        where(users.c.id == addresses.c.id).\
+        where(addresses.c.email_address.startswith('ed%'))
+conn.execute(stmt)
+```
+
+上面例子中渲染的语句为:
+
+```python
+UPDATE users SET name=:name FROM addresses
+WHERE users.id = addresses.id AND
+addresses.email_address LIKE :email_address_1 || '%'
+```
+
+在使用MySQL时，每个表中的列可以直接在SET中使用，可以在`Update.values()`直接传入一个字典：
+
+```python
+stmt = users.update().\
+            values({
+                users.c.name: 'ed wood',
+                addresses.c.email_address: 'ed.wood@foo.com'
+            }).\
+            where(users.c.id == addresses.c.id).\
+            where(addresses.c.email_address.startswith('ed%'))
+```
+
+结果如下：
+
+```python
+UPDATE users, addresses SET addresses.email_address=%s,
+        users.name=%s WHERE users.id = addresses.id
+        AND addresses.email_address LIKE concat(%s, '%')
+```
+
+### Parameter-Ordered Updates
+
+pass
+
+### Deletes
+
+最后，删除可以使用`.delete()`来完成:
+
+```python
+>>> conn.execute(addresses.delete())
+
+DELETE FROM addresses
+()
+COMMIT
+
+<sqlalchemy.engine.result.ResultProxy object at 0x...>
+
+>>> conn.execute(users.delete().where(users.c.name > 'm'))
+
+DELETE FROM users WHERE users.name > ?
+('m',)
+COMMIT
+
+<sqlalchemy.engine.result.ResultProxy object at 0x...>
+```
+
+### Multiple Table Deletes
+
+也是通过WHERE字句来完成的：
+
+```python
+stmt = users.delete().\
+        where(users.c.id == addresses.c.id).\
+        where(addresses.c.email_address.startswith('ed%'))
+conn.execute(stmt)
+```
+
+将会生成如下的SQL:
+
+```python
+DELETE FROM users USING addresses
+WHERE users.id = addresses.id
+AND (addresses.email_address LIKE %(email_address_1)s || '%%')
+```
+
+### Matched Row Counts
+
+`update()`和`delete()`都会返回这次操作关联的row计数，这个值可以通过`rowcount`来获取:
+
+```python
+>>> result = conn.execute(users.delete())
+
+DELETE FROM users
+()
+COMMIT
+
+>>> result.rowcount()
+1
+```
+
