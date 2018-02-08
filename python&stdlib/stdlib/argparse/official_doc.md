@@ -1412,8 +1412,173 @@ Namespace(subparser_name='2', y='frobble')
 
 #### FileType objects(FileType对象)
 
+- class`argparse.FileType(mode='r', bufsize=-1, encoding=None, erros=None)`
 
+    `FileType`工厂函数创建的对象可以当作`ArgumentParser.add_argument()`的`type`参数使用。
 
+    ```python
+    >>> parser = argparse.ArgumentParser()
+    >>> parser.add_argument('--raw', type=argparse.FileType('wb', 0))
+    >>> parser.add_argument('out', type=argparse.FileType('w', encoding='UTF-8'))
+    >>> parser.parse_args(['--raw', 'raw.dat', 'file.txt'])
+    Namespace(out=<_io.TextIOWrapper name='file.txt' mode='w' encoding='UTF-8'>, raw=<_io.FileIO name='raw.dat' mode='wb'>)
+    ```
 
+    `FileType`对象可以理解伪参数`-`，并按照mode将它自动转换为`sys.stdin`/`sys.stdout`
 
+    ```python
+    >>> parser = argparse.ArgumentParser()
+    >>> parser.add_argument('infile', type=argparse.FileType('r'))
+    >>> parser.parse_args(['-'])
+    Namespace(infile=<_io.TextIOWrapper name='<stdin>' encoding='UTF-8'>)
+    ```
 
+#### Argument groups
+
+- `ArgumentParser.add_argument_group(title=None, description=None)`
+
+    默认情况下，`ArgumentParser`会有两个分组:"位置参数“或”选项参数".使用参数组的一大好处就是可以在帮助文本中将参数进行分类：
+
+    ```python
+    >>> parser = argparse.ArgumentParser(prog='PROG', add_help=False)
+    >>> group = parser.add_argument_group('group')
+    >>> group.add_argument('--foo', help='foo help')
+    >>> group.add_argument('bar', help='bar help')
+    >>> parser.print_help()
+    usage: PROG [--foo FOO] bar
+
+    group:
+    bar    bar help
+    --foo FOO  foo help
+    ```
+
+    `add_arugment_group()`返回一个argument_group对象，它也有`add_argument()`方法。`add_argument_group()`还可以接受`title`, `description`参数.
+
+    ```python
+    >>> parser = argparse.ArgumentParser(prog='PROG', add_help=False)
+    >>> group1 = parser.add_argument_group('group1', 'group1 description')
+    >>> group1.add_argument('foo', help='foo help')
+    >>> group2 = parser.add_argument_group('group2', 'group2 description')
+    >>> group2.add_argument('--bar', help='bar help')
+    >>> parser.print_help()
+    usage: PROG [--bar BAR] foo
+
+    group1:
+    group1 description
+
+    foo    foo help
+
+    group2:
+    group2 description
+
+    --bar BAR  bar help
+    ```
+
+#### Mutual exclusion
+
+- `ArgumentParser.add_mutually_exclusive_group(required=False)`
+
+    创建一个互斥的组。`argparse`将会确保在这个组中的参数只有一个会出现在命令行中。
+
+    ```python
+    >>> parser = argparse.ArgumentParser(prog='PROG')
+    >>> group = parser.add_mutually_exclusive_group()
+    >>> group.add_argument('--foo', action='store_true')
+    >>> group.add_argument('--bar', action="store_false')
+    >>> parser.parse_args(['--foo'])
+    Namespace(bar=True, foo=True)
+    >>> parser.parse_args(['--foo', '--bar'])
+    usage: PROG [-h] [--foo | --bar]
+    PROG: error: argument --bar: not allowed with argument --foo
+    ```
+
+    `add_mutually_exclusive_group()`还接受`required`参数，要求必须提供一个参数:
+
+    ```python
+    >>> parser = argparse.ArgumentParser(prog='PROG')
+    >>> group = parser.add_mutually_exclusive_group(required=True)
+    >>> group.add_argument('--foo', action='store_true')
+    >>> group.add_argument('--bar', action='store_false')
+    >>> parser.parse_args([])
+    usage: PROG [-h] (--foo | --bar)
+    PROG: error: one of the arguments --foo --bar is required
+    ```
+
+#### Parser defaults
+
+- `ArgumentParser.set_defaults(**kwargs)`
+
+    大多数时候，`parse_args()`返回的对象属性取决于命令行参数和命令行参数绑定的action。`set_defaults()`允许加入一些额外的属性。
+
+    ```python
+    >>> parser = argparse.ArgumentParser()
+    >>> parser.add_argument('foo', type=int)
+    >>> parser.set_defaults(bar=42, baz='badger')
+    >>> parser.parse_args(['736'])
+    Namespace(bar=42, baz='badger', foo=736)
+    ```
+
+    注意：`parser`级别的default会覆盖`argument`级别的default:
+
+    ```python
+    >>> parser = argparse.ArgumentParser()
+    >>> parser.add_argument('--foo', default='bar')
+    >>> parser.set_defaults(foo='spam')
+    >>> parser.parse_args([])
+    Namespace(foo='spam')   
+    ```
+
+- `ArgumentParser.get_default(dest)`
+
+    获取一个属性的默认值。
+
+    ```python
+    >>> parser = argparse.ArgumentParser()
+    >>> parser.add_argument('--foo', default='badger')
+    >>> parser.get_default('foo')
+    'badger'
+    ```
+
+#### Printing help
+
+- `ArgumentParser.print_uage(file=None)`
+
+- `ArgumentParser.print_help(file=None)`
+
+- `ArgumentParser.format_usage()`
+
+- `ArgumentParser.format_help()`
+
+#### Partial parsing
+
+- `ArgumentParser.parse_known_args(args=None, namespace=None)`
+
+    有时脚本可能只解析一部分命令行参数，剩下的参数将会发送给其它程序或脚本。在这种情况下，`parse_known_args()`会很有用。它很像`parse_args()`，不过在出现额外的参数时不会报错，它会返回一个两个元素的元组，一个是namespace，另一个是剩下的参数字符串.
+
+    ```python
+    >>> parser = argparse.ArgumentParser()
+    >>> parser.add_argument('--foo', action='store_true')
+    >>> parser.add_argument('bar')
+    >>> parser.parse_known_args(['--foo', '--badger', 'BAR', 'spam'])
+    (Namespace(bar='BAR', foo=True), ['--badger', 'spam'])
+    ```
+
+#### Customazing file parsing
+
+- `ArgumentParser.convert_arg_line_to_args(arg_line)`
+
+    可以覆盖这个方法来重新定义文件解析的方式,arg_line代表文件中的一行。这个方法在解析文件时会多次调用。
+
+#### Exiting methods
+
+- `ArgumentParser.exit(status=0, message=None)`
+
+    这个方法会让一个程序结束.
+
+- `ArgumentParser.error(message)`
+
+    这个方法会让程序以status=2退出.
+
+### Upgrading optparse code
+
+...
