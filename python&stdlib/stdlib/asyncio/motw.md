@@ -17,3 +17,189 @@
 `Future`是一种数据结构，代表一个数据的结果还没有完成。事件循环可以观察`Future`对象是否完成，允许应用的一部分代码等待另一部分代码完成。除了`Future`，`asyncio`包含另外一些并发原语，包括locks, semaphores.
 
 `Task`是`Future`是一个子类，它知道如何封装和管理一个协程的执行。Task可以被事件循环规划执行，可以生成一个结果供其它协程使用。
+
+## Cooperative Multitasking with Coroutines
+
+协程是一种(编程)语言结构，设计于用来并发操作。协程函数会在调用时创建一个协程对象，调用者可以使用协程的`.send()`方法来运行它的代码。协程可以使用`await`关键字让另一个协程暂停。当它暂停的时候，协程的状态会保持，在下一次被唤醒时接着使用。
+
+### Starting a Coroutine
+
+`asyncio`有若干种方法可以运行一个协程。最简单地即使用`run_until_complete()`，直接传入一个协程。
+
+#### asyncio_coroutine.py
+
+```python
+# asyncio_coroutine.py
+
+import asyncio
+
+
+async def coroutine():
+    print('incoroutine')
+
+
+event_loop = asyncio.get_event_loop()
+try:
+    print('starting coroutine')
+    coro = coroutine()
+    print('entering event loop')
+    event_loop.run_until_complete(coro)
+finally:
+    print('closing event loop')
+    event_loop.close()
+```
+
+首先是要获取一个事件循环。可以使用默认的循环，或者指定一个事件循环。在这里例子中，我们使用默认的事件循环。`.run_until_complete()`方法使用协程开启了这个循环，在协程退出返回时关闭了循环。
+
+```shell
+$ python3 asyncio_coroutine.py
+
+starting coroutine
+entering event loop
+in coroutine
+closing event loop
+```
+
+### Returing Values from Coroutines
+
+协程返回的值会发送给它的调用者
+
+#### asyncio_coroutine_return.py
+
+```python
+# asyncio_coroutine_return.py
+import asyncio
+
+
+async def coroutine():
+    print('in coroutine')
+    return 'result'
+
+
+event_loop = asyncio.get_event_loop()
+try:
+    return_value = event_loop.run_until_complete(
+        coroutine()
+    )
+    print('it returned {!r}'.format(return_value))
+finally:
+    event_loop.close()
+```
+
+在这个例子中，`.run_until_complete()`会返回协程的结果:
+
+```shell
+$ python3 asyncio_coroutine_return.py
+
+in coroutine
+it returned: 'result'
+```
+
+### Chaining Coroutines
+
+一个协程可以等待另一个协程的结果再执行。这种特性可以让代码分解成更多可重用的部分。下面例子中的两个阶段必须按顺序执行，但是可以并发执行其它操作.
+
+#### asyncio_coroutine_chain.py
+
+```python
+# asyncio_coroutine_chain.py
+
+import asyncio
+
+
+async def outer():
+    print('in outer')
+    print('waiting for result1')
+    result1 = await phase1()
+    print('waiting for result2')
+    result2 = await phase2(result1)
+    return (result1, result2)
+
+
+async def phase1():
+    print('in phase1')
+    return 'result1'
+
+
+async def phase2(arg):
+    print('in phase2')
+    return "result2 derived from {}".format(arg)
+
+
+event_loop = asyncio.get_event_loop()
+try:
+    return_value = event_loop.run_until_complete(outer())
+    print('return value: {!r}'.format(return_value))
+finally:
+    event_loop.close()
+```
+
+`await`关键字可以用来代替为事件循环显式地加入新协程，因为控制流已经处于一个事件循环管理的协程里面了，所以不需要再告诉它管理新的协程。
+
+```shell
+$ python3 asyncio_coroutine_chain.py
+
+in outer
+waiting for result1
+in phase1
+waiting for result2
+in phase2
+return value: ('result1', 'result2 derived from result1')
+```
+
+### Generators instead of Coroutines
+
+协程函数是`asyncio`设计的一个核心组件。它提供了一个语言层面的构造可以暂停程序一部分的执行，保留调用的状态，在之后可以重新获取这个状态，它们都是并发框架所需的重要能力。
+
+Python3.5引入了新的语言特性来定义原生协程(`async def`)，可以使用`await`来交出控制权，上面`asnycio`的例子都利用了这个新特性。在Python3以前可以使用生成器+`asyncio.coroutine`装饰器+`yield from`来达到相同的效果。
+
+#### asyncio_generator.py
+
+```python
+# asyncio_generator.py
+
+import asyncio
+
+
+@asyncio.generator
+def outer():
+    print('in outer')
+    print('waiting for result1')
+    result1 = yield from phase1()
+    print('waiting for result2')
+    result2 = yield from phase2()
+    return (result1, result2)
+
+
+@asyncio.coroutine
+def phase1():
+    print('in phase1')
+    return 'result1'
+
+
+@asyncio.coroutine
+def phase2(arg):
+    print('in phase2')
+    return 'result2 derived from {}'.format(arg)
+
+
+event_loop = asyncio.get_event_loop()
+try:
+    return_value = event_loop.run_until_complete(outer())
+    print('return value: {!r}'.format(return_value))
+finally:
+    event_loop.close()
+```
+
+上面的代码和`asyncio_coroutine_chain.py`结果一样:
+
+```shell
+$ python3 asyncio_generator.py
+
+in outer
+waiting for result1
+in phase1
+waiting for result2
+in phase2
+return value: ('result1', 'result2 derived from result1')
+```
