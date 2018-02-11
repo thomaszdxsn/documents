@@ -116,4 +116,56 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
 
 ## ProcessPoolExecutor
 
+`ProcessPoolExecutor`类是`Executor`的一个子类，它使用进程池来异步执行可调用对象。`ProcessPoolExecutor`使用`multiprocessing`模块，可以回避GIL的问题，不过也只可以执行pickable的对象并返回。
+
+`__main__`模块必须可以被其它worker子进程可引用。这意味着`ProcessPoolExecutor`不可以用在REPL.
+
+和线程池一样，重复调用有可能会造成死锁。
+
+- class`concurrent.futures.ProcesPoolExecutor(max_workers=None)`
+
+    `Executor`子类使用进程池并设定了最大`max_workers`个进程。如果`max_workers=None`，默认会使用本机器的核心数量作为worker数量。如果这个参数小于等于0，将会抛出`ValueErrro`.
+
+    > 如果进程意外的中止，将会抛出`BrokenProcessPool`异常。
+
+### ProcessPoolExecutor Exmaple
+
+```python
+import concurrent.futures
+import math
+
+
+PRIMES = [
+    112272535095293,
+    112582705942171,
+    112272535095293,
+    115280095190773,
+    115797848077099,
+    1099726899285419
+]
+
+
+def is_prime(n):
+    if n % 2 == 0:
+        return False
+
+    sqrt_n = int(math.floor(math.sqrt(n)))
+    for i in range(3, sqrt_n + 1, 2):
+        if n % i == 0:
+            return False
+    return True
+
+
+def main():
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        for number, prime in zip(PRIMES, executor.map(is_prime, PRIMES)):
+            print("%d is prime: %s".format(number, prime))
+
+
+if __name__ == '__main__':
+    main()
+```
+
+## Future Objects
+
 pass
