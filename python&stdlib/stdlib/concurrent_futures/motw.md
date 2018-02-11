@@ -162,4 +162,292 @@ main: result: (1, 0.1)
 
 ## Future Callbacks
 
-pass
+想要在一个task完成以后作一些事情，而不用显示的等待结果出现后在手动处理，可以使用`add_done_callback()`来指定一个`Future`完成以后调用的函数。这个callback以单参数`Future`调用.
+
+### futures_future_callback.py
+
+```python
+# futures_future_callback.py
+
+from concurrent import futures
+import time
+
+
+def task(n):
+    print("{}: sleeping".format(n))
+    time.sleep(0.5)
+    print("{}: done".format(n))
+    return n / 10
+
+
+def done(fn):
+    if fn.cancelled():
+        print("{}: canceled".format(fn.arg))
+    elif fn.done():
+        error = fn.exception()
+        if error:
+            print("{}: error returned: {}".format(
+                fn.arg, error
+            ))
+        else:
+            result = fn.result()
+            print("{}: value returned: {}".format(
+                fn.arg, result
+            ))
+            
+
+if __name__ == '__main__':
+    ex = futures.ThreadPoolExecutor(max_workers=2)
+    print("main: starting")
+    f = fx.submit(task, 5)
+    f.arg = 5
+    f.add_done_back(done)
+    result = f.result()
+```
+
+输出如下:
+
+```shell
+$ python3 futures_future_callback.py
+
+main: starting
+5: sleeping
+5: done
+5: value returned: 0.5
+```
+
+## Cancelling Tasks
+
+`Future`可以被取消，如果已经被提交但是还没有启动，可以调用`.cancel()`方法来取消。
+
+### futures_future_callback_cancel.py
+
+```python
+# futures_future_callback_cancel.py
+
+from concurrent import futures
+import time
+
+
+def task(n):
+    print('{}: sleeping'.format(n))
+    time.sleep(0.5)
+    print('{}: done'.format(n))
+    return n / 10
+
+
+def done(fn):
+    if fn.cancelled():
+        print('{}: canceled'.format(fn.arg))
+    elif fn.done():
+        print('{}: not canceled'.format(fn.arg))
+
+
+if __name__ == '__main__':
+    ex = futures.ThreadPoolExecutor(max_workers=2)
+    print("main: starting")
+    tasks = []
+
+    for i in range(10, 0, -1):
+        print("main: submitting {}".format(i))
+        f = ex.submit(task, i)
+        f.arg = i
+        f.add_done_callback(done)
+        tasks.append((i, f))
+
+    for i, t in reversed(tasks):
+        if not t.cancel():
+            print('main: did not cancel {}'.format(i))
+    
+    ex.shutdown()
+```
+
+`cancel()`返回一个布尔值，代表任务是否成功被取消。
+
+```shell
+$ python3 futures_future_callback_cancel.py
+
+main: starting
+main: submitting 10
+10: sleeping
+main: submitting 9
+9: sleeping
+main: submitting 8
+main: submitting 7
+main: submitting 6
+main: submitting 5
+main: submitting 4
+main: submitting 3
+main: submitting 2
+main: submitting 1
+1: canceled
+2: canceled
+3: canceled
+4: canceled
+5: canceled
+6: canceled
+7: canceled
+8: canceled
+main: did not cancel 9
+main: did not cancel 10
+10: done
+10: not canceled
+9: done
+9: not canceled
+```
+
+## Exceptions in Tasks
+
+如果一个task抛出一个未被处理的exception，它会被保存到Future对象中，通过`result()`或者`exception()`来获取它。
+
+### futures_future_exception.py
+
+```python
+# futures_future_exception.py
+
+from concurrent import futures
+
+
+def task(n):
+    print("{}: starting".format(n))
+    raise ValueError("the value {} is no good".format(n))
+
+
+ex = futures.ThreadPoolExecutor(max_workers=2)
+print("main: starting")
+f = ex.submit(task, 5)
+
+error = f.exception()
+print("main: error: {}".format(error))
+
+try:
+    result = f.result()
+except ValueError as e:
+    print('main: saw error "{}" when accessing result'.format(e))
+```
+
+如果调用`.result()`的时候抛出一个未捕获的异常，这个异常会在当前的上下文中再次抛出。
+
+```shell
+$ python3 futures_future_exception.py
+
+main: starting
+5: starting
+main: error: the value 5 is no good
+main: saw error "the value 5 is no good" when accessing result
+```
+
+## Context Manager
+
+Executor可以以上下文管理器的方式运行，可以并发的运行task并等待它们完成。在上下文管理器退出的时候，会调用executor的`.shutdown()`方法。
+
+### futures_context_manager.py
+
+```python
+# futures_context_manager.py
+
+from concurrent import futures
+
+
+def task(n):
+    print(n)
+
+
+with futures.ThreadPoolExecutor(max_workers=2) as ex:
+    print("main: starting")
+    ex.submit(task, 1)
+    ex.submit(task, 2)
+    ex.submit(task, 3)
+    ex.submit(task, 4)
+
+print("main: done")
+```
+
+输出如下:
+
+```shell
+$ python3 futures_context_manager.py
+
+main: starting
+1
+2
+3
+4
+main: done
+```
+
+## Process Pools
+
+`ProcessPoolExecutor`和`ThreadPoolExecutor`类似，但是使用进程来代替线程。使用进程可以利用多核CPU来进行CPU密集型操作，不会受限于CPython的GIL。
+
+### futures_process_pool_map.py
+
+```python
+# futures_process_pool_map.py
+
+from concurrent import futures
+import os
+
+
+def task(n):
+    return n, os.getpid()
+
+
+ex = futures.ProcessPoolExecutor(max_workers=2)
+results = ex.map(task, range(5, 0, -1))
+for n, pid in results:
+    print("ran task {} in process {}".format(n, pid))
+```
+
+和线程池一样，单独的worker进程可以用在多个task：
+
+```shell
+$ python3 futures_process_pool_map.py
+
+ran task 5 in process 60245
+ran task 4 in process 60246
+ran task 3 in process 60245
+ran task 2 in process 60245
+ran task 1 in process 60245
+```
+
+### futures_process_pool_broken.py
+
+如果在worker进程运行的时候发生了一些意料之外的事情，`ProcessPoolExecutor`会被认为是“broken”并不再进行任务的规划。
+
+```python
+# futures_process_pool_broken.py
+
+from concurrent import futures
+import os
+import signal
+
+
+with futures.ProcessPoolExecutor(max_workers=2) as ex:
+    print("getting the pid for one worker")
+    f1 = ex.submit(os.getpid)
+    pid1 = f1.result()
+
+    print("killing process {}".format(pid1))
+    os.kill(pid1, signal.SIGHUP)
+
+    print("submitting another task")
+    f2 = ex.submit(os.getpid)
+    try:
+        pid2 = r2.result()
+    except futures.process.BrokenProcessPool as e:
+        print("could not start new tasks: {}".format(e))
+```
+
+异常`BrokenProcessPool`会在结果被处理的时候抛出，而不是任务被提交的时候。
+
+```shell
+$ python3 futures_process_pool_broken.py
+
+getting the pid for one worker
+killing process 62059
+submitting another task
+could not start new tasks: A process in the process pool was
+terminated abruptly while the future was running or pending.
+```
+
