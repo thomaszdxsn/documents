@@ -16,4 +16,8 @@
 
 - class`asyncio.BaseTransport`
 
-    
+    transport的积累。
+
+    - `close()`
+
+        关闭transport。
