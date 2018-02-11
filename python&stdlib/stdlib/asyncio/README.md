@@ -3,6 +3,7 @@
 
 -- | --
 -- | --
+PEP-3153(支持异步I/O) | https://www.python.org/dev/peps/pep-3153/
 PEP-3156(重启异步I/O开发:"asyncio"模块) | https://www.python.org/dev/peps/pep-3156
 PEP-380(委托子生成器的语法) | https://www.python.org/dev/peps/pep-0380
 PEP-492(协程以及async/await语法) | https://www.python.org/dev/peps/pep-0492

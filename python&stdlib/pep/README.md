@@ -43,3 +43,11 @@
 - PEP0380 -- 委派一个子生成器的语法(2009-2-13)
 
     TODO
+
+- PEP3153 -- 支持异步I/O
+
+    这篇PEP是asyncio的设计初稿，在这篇PEP中介绍了`transport`和`protocol`两个概念，以及如何使用它们来进行异步I/O。
+
+- PEP3156 -- 重启支持异步I/O：asyncio模块
+
+    pass
