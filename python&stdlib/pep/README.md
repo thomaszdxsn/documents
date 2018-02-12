@@ -51,3 +51,7 @@
 - PEP3156 -- 重启支持异步I/O：asyncio模块
 
     pass
+
+- PEP3148 -- futures - 执行异步计算
+
+    参考Java的同名库实现了`concurrent.futures`库，这个库可以轻松的实现任务的异步执行。

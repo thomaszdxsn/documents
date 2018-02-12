@@ -168,4 +168,89 @@ if __name__ == '__main__':
 
 ## Future Objects
 
-pass
+`Future`类将一个可调用对象封装为异步执行。`Future`实例通过`Executor.submit()`创建。
+
+- class`concurrent.futures.Future`
+
+    `Future`类将一个可调用对象封装为异步执行。`Future`实例通过`Executor.submit()`创建，不应该直接实例化Future类。
+
+    - `cancel()`
+
+        试图取消调用。如果调用已经执行不能取消，那么就会返回`False`，如果成功的取消则会返回`True`.
+
+    - `cancelled()`
+
+        如果调用成功取消，则返回`True`.
+
+    - `running()`
+
+        如果调用当前在执行，不能被取消，返回`True`.
+
+    - `done()`
+
+        如果调用已经取消或者结束了运行，则返回`True`.
+
+    - `result(timeout=None)`
+
+        返回调用的值。如果调用还没有完成将会等待`timeout`秒的时间。如果在规定时间内还没有完成，将会抛出`concurrent.futures.TimeoutError`.如果没有指定timeout，将会无期限等待这个调用的执行。
+
+    - `exception(timeout=None)`
+
+        返回调用抛出的异常。也可以设置timeout。
+
+    - `add_done_callback(fn)`
+
+        将一个可调用对象`fn`粘附于一个future。在`future`被取消或执行结束后，`fn`会一个这个`future`对象作为唯一的参数调用。
+
+        加入的callback会按照顺序被调用。如果这个callback抛出了`Exception`的子类，它将会被记录到日志然后被忽略。
+
+    下面的一些方法主要用于单元测试。
+
+    - `set_running_or_notify_cancel()`
+
+        这个方法应该只被`Executor`调用。
+
+    - `set_result(result)`
+
+        设置`Future`的结果。
+
+    - `set_exception(exception)`
+
+        设置`Future`的异常。
+
+## Module Functions
+
+- `concurrent.futures.wait(fs, timeout=None, return_when=ALL_COMPLETED)`
+
+    等待给定的`fs`(一组Future实例)都完成。返回一个包含两个集合的元组，一个集合叫做`done`，包含结束的futures。第二个集合，叫做`not_done`(pending)，包含未完成的futures。
+
+    `timeout`可以用于控制等待的时长。
+
+    `return_when`指明函数应该在什么时候返回。它必须是以下的常量之一:
+
+    常量 | 描述
+    -- | --
+    FIRST_COMPLETED | 在碰到第一个future结束或取消的时候，函数返回
+    FIRST_EXCEPTION | 在碰到第一个future抛出异常的时候，函数返回
+    ALL_COMPLETED | 在所有future都结束的时候，函数返回
+
+- `concurrent.futures.as_completed(fs, timeout=None)`
+
+    返回一个包含future对象的可迭代对象。
+
+## Exception classes
+
+- exception`concurrent.futures.CancelledError`
+
+    在future取消的时候，抛出这个错误。
+
+- exception`concurrent.futures.TimeoutError`
+
+    在future执行时间超出给定时长的时候，抛出这个错误。
+
+- exception`concurrent.futures.BrokenProcessPool`
+
+    继承自`RuntimeError`，如果`ProcessPoolExecutor`有某个worker进程异常终止了，抛出这个错误。
+
+    
+    
