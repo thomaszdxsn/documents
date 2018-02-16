@@ -59,3 +59,7 @@
 - PEP0492 -- 协程以及async/await语法
 
     pass
+
+- PEP0450 -- 为标准库加入了一个statistics模块
+
+    pass
