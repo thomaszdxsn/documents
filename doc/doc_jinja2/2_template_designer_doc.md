@@ -1285,4 +1285,208 @@ Jinja2允许你对值进行计算。支持以下的运算符：
 
 - `tojson(value, indent=None)`
 
-    pass
+    将一个数据结构转换为JSON，可以用在`<script>`标签。
+
+    字符串中的下列字符会被转义：
+
+    - `<`
+    - `>`
+    - `&`
+    - `'`
+
+    注意这个filter主要用于HTML。
+
+- `trim(value)`
+
+    去掉开头和结尾的空格字符。
+
+- `truncate(s, length=255, killwords=False, end='...', leeway=None)`
+
+    放回一个字符串的缩减版。`length`可以限定字符串的长度。`killwords`设置为True将会保留length长度的字符串，否则会把最后一位去掉。`end`代表字符串的结尾字符。
+
+    ```html
+    {{ 'foo bar baz qux'|truncate(9) }}
+        -> "foo..."
+    {{ "foo bar baz qux"|truncate(9, True) }}
+        -> "foo ba..."
+    {{ "foo bar baz qux"|truncate(11) }}
+        -> "foo bar baz qux"
+    {{ "foo bar baz qux"|truncate(11, False, '...', 0) }}
+        -> "foo bar..."
+    ```
+
+- `unique(value, case_sensitive=False, attribute=None)`
+
+    将一个给定iterable的unique item list。(等同于`list(set(iterable))`)
+
+    ```html
+    {{ ['foo', 'bar', 'foobar', 'FooBar']|unique }}
+        -> ['foo', 'bar', 'foobar']
+    ```
+
+    参数:
+
+    - `case_sensitive`
+    - `attribute`
+
+- `upper(s)`
+
+    将一个值转换为大写。
+
+- `urlencode(value)`
+
+    将一个字符串以URL编码格式编码.
+
+- `urlize(value, trim_url_limit=None, nofollow=False, target=None, rel=None)`
+
+    将一个代表URL的普通文本转换为可点击的链接。
+
+    例子：
+
+    ```html
+    {{ mytext|urlize(40, true) }}
+        Link被缩减为40个字符，并且定义了rel="nofollow"
+    ```
+
+    ```html
+    {{ mytext|urlize(40, target='_blank') }}
+    ```
+
+- `wordcount(s)`
+
+    计数一个单词在字符串中出现的次数。
+
+- `wordwrap(s, width=79, break_long_words=True, wrapstring=None)`
+
+    字符串使用这个filter将会按照进行格式化。和Python中的`textwrap`模块类似。
+
+- `xmlattr(d, autospace=True)`
+
+    根据一个字典的item来定义XML属性。
+
+    ```html
+    <ul {{ {'class': 'my_list', 'missing': None, 
+            'id': 'list-%d'}|format(variable)|xmlattr }}>
+    ...
+    </ul>            
+    ```
+
+    结果为:
+
+    ```html
+    <ul class='my_list' id='list-42'>
+    ...
+    </ul>
+    ```
+
+## List of Builtin Tests
+
+- `callable(object)`
+
+    判断这个object是否为callable。
+
+- `defined(value)`
+
+    判断一个变量是否定义：
+
+    ```html
+    {% if variable is defined %}
+        value of variable: {{ variable }}
+    {% else %}
+        variable is not defined
+    {% endif %}
+    ```
+
+- `divisibleby(value, num)`
+
+    检查一个变量是否能被一个数整除。
+
+- `eq(a, b)`
+
+    等同于`==`, `equalto`
+
+- `escaped(value)`
+
+    判断一个值是否被转义。
+
+- `even(value)`
+
+    判断一个值是否为偶数。
+
+- `ge(a, b)`
+
+    等同于`>=`.
+
+- `gt(a, b)`
+
+    等同于`>`, `greaterthan`.
+
+- `in(value, seq)`
+
+    判断这个值是否在一个序列中。
+
+- `iterable(value)`
+
+    判断一个值是否为iterable.
+
+- `le(a, b)`
+
+    等同于`<=`.
+
+- `lower(value)`
+
+    判断一个值是否为小写形式。
+
+- `lt(a, b)`
+
+    等同于`<`, `lessthan`
+
+- `mapping(value)`
+
+    判断一个对象是否为mapping对象。
+
+- `ne(a, b)`
+
+    等同于`!=`
+
+- `none(value)`
+
+    判断一个值是否为none
+
+- `number(value)`
+
+    判断一个值是否为数字。
+
+- `odd(value)`
+
+    判断一个值是否为奇数。
+
+- `semeas(value, other)`
+
+    检查一个对象是否和另一个对象具有相同的内存地址：
+
+    ```html
+    {% if foo.attribute is semeas false %}
+        the foo attribute really is the `False` singleton
+    {% endif %}
+    ```
+
+- `sequence(value)`
+
+    判断一个值是否为序列对象。
+
+- `string(value)`
+
+    判断一个值是否为string。
+
+- `undefined(value)`
+
+    判断一个变量是否未定义。
+
+- `upper(value)`
+
+    判断一个值是否为大写形式。
+
+## List of Global Functions
+
+pass 
