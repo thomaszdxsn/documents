@@ -743,4 +743,33 @@ Block用于模版继承，可以将它看作是占位符。
 
 ### Include
 
+*include*语句可以用来把一个模版包含在内并且会将这个文件使用当前的命名空间渲染并返回渲染后的内容：
+
+```html
+{% include 'header.html' %}
+    Body
+{% include 'footer.html' %}
+```
+
+包含的模版默认会访问当前激活的context中的变量。
+
+从Jinja2.2以后，你可以为include标记`ignore missing`；它代表如果包含模版如果缺少了必须的变量，Jinja将会忽略那条语句。在将`ignore missing`组合`with`或者`without context`时，它必须放置前面。下面是一个合法的语句：
+
+```html
+{% include 'sidebar.html' ignore missing %}
+{% include 'sidebar.html' ignore missing with context %}
+{% include 'sidebar.html' ignore missing without context %}
+```
+
+另外你可以提供一组模版，在将它们包含进来之前检查是否存在。在发现首个存在的模版之后就会把它之后包含进来，剩下的都会被忽略。如果给定了`ignore missing`，如果模版不存在则什么都不渲染，否则会抛出异常。
+
+例子：
+
+```html
+{% include ['page_detailed.html', 'page.html'] %}
+{% include ['special_sidebar.html', 'sidebar.html'] ignore missing %}
+```
+
+### Import
+
 pass
