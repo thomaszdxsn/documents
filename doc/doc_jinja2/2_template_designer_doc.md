@@ -522,4 +522,225 @@ loop.changed(*val) | 如果之前以另一个值调用过(或者没有调用过)
 
 ### If
 
-pass 
+Jinja2中的`if`语句和Python的if语句一样。最简单的情况是，你可以用来测试一个变量是否定义，非空或者非False：
+
+```html
+{% if users %}
+<ul>
+{% for user in users %}
+    <li>{{ user.username | e}}</li>
+{% endfor %}
+</ul>
+{% endif %}
+```
+
+至于多分枝条件，你可以使用Python中的`elif`和`else`:
+
+```html
+{% if kenney.sick %}
+    Kenney is sick.
+{% elif kenny.dead %}
+    You killed Kenny! You bastard!!!
+{% else %}
+    Kenney looks okay -- so far
+{% endif %}
+```
+
+### Macros
+
+Macro可以类比普通编程语言的函数。可以让你实践DRY原则。
+
+下面是一个简单的macro例子，用来渲染一个form元素:
+
+```html
+{% macro input(name, value='', type='text', size=20) -%}
+    <input type="{{ type }}" name="{{ name }}" 
+           value="{{ value|e }}" size="{{ size }}">
+{% endmacro %}
+```
+
+这个macro可以像函数一样调用：
+
+```html
+<p>{{ input('username') }}</p>
+<p>{{ input('password', type='password') }}</p>
+```
+
+在macro中，你可以访问三种特殊变量：
+
+- `varargs`
+
+    如果传入的位置参数多于这个macro接收的参数，它们将会存储到`varargs`这个list中。
+
+- `kwargs`
+
+    像`varargs`，不过存储的是额外的关键字参数。
+
+- `caller`
+
+    如果这个macro通过`call`标签来调用，caller将会作为一个callable macrol来存储在这个变量中。
+
+Macro对象也暴露了一些内部属性：
+
+- `name`
+
+    这个macro的名称。`{{ input.name }}`将会打印input.
+
+- `arguments`
+
+    这个macro接受的参数，元组。
+
+- `default`
+
+    默认值的元组。
+
+- `catch_kwargs`
+
+    如果macro接受了额外的关键字参数则返回True(也就是说可以访问特殊变量`kwargs`)
+
+- `catch_varargs`
+
+    如果macro接受了额外的位置参数则返回True(也就是说可以访问特殊变量`varargs`)
+
+- `caller`
+
+    如果macro可以访问特殊变量`caller`，则返回True。
+
+### Call
+
+有些情况需要把一个macro传给另一个macro。出于这个目的，你可以使用特殊的`call`标签。下面是一个macro利用call的例子：
+
+```html
+{% macro render_dialog(title, class='dialog') -%}
+    <div class="{{ class }}">
+        <h2>{{ title }}</h2>
+        <div class="contents">
+            {{ caller() }}
+        </div>
+    </div>
+{% endmacro %}
+
+
+{% call render_dialog('Hello World') %}
+    This is a simple dialog rendered by using a macro and
+    a call block.
+{% endcall %}
+```
+
+你可以将`call`标签看作是一个匿名macro。
+
+下面是一个为call传入参数的例子:
+
+```html
+{% macro dump_users(users) -%}
+    <ul>
+    {%- for user in users %}
+        <li><p>{{ user.username|e }}</p>{{ caller(user) }}</li>
+    {%- endfor %}
+    </ul>
+{% endmacro %}
+
+{% call(user) dump_users(list_of_user) %}
+    <dl>
+        <dl>Realname</dl>
+        <dd>{{ user.realname|e }}</dd>
+        <dl>Description</dl>
+        <dd>{{ user.description }}</dd>
+    </dl>
+{% endcall %}
+```
+
+### Filters
+
+Filter标签允许你将一个常规的Jinja filter应用于一块模版数据：
+
+```html
+{% filter upper %}
+    This text becomes uppercase
+{% endfilter %}
+```
+
+### Assignments
+
+在一个代码块中，你可以将一个值赋值给一个变量。在模版顶层赋值后这个变量可以被其它模版引入。
+
+赋值使用`set`标签，可以赋值多个变量：
+
+```html
+{% set navigation = [('index.html', 'Index'), ('about.html', 'About')] %}
+{% set ket, value = call_something() %}
+```
+
+#### Scope Behavior
+
+请记住变量不能在一个block中赋值。不过也有例外，因为有些语句不会添加作用域。比如下面的模版结果可能不如你所想象：
+
+```html
+{% set iterated = false %}
+{% for item in seq %}
+    {{ item }}
+    {% set iterated = true %}
+{% endfor %}
+{% if not iterated %} did not iterate {% endif %}
+```
+
+Jinja不能这么写，你应该使用for的else字句:
+
+```html
+{% for item in seq %}
+    {{ item }}
+{% else %}
+    did not iterate
+{% endfor %}
+```
+
+从2.10版本开始，一些复杂的例子可以使用namespace对象来传播(可以穿越作用域):
+
+```html
+{% set ns = namespace(found=false) %}
+{% for item in items %}
+    {% if item.check_soemthing() %}
+        {% set ns.found = true %}
+    {% endif %}
+    * {{ item.title }}
+{% endfor %}
+Found item having something: {{ ns.found }}
+```
+
+注意`set`标签中的`obj.attr`语法只可以对namespace对象使用；如果对其它对象使用这个语法则会抛出错误。
+
+### Block Assignments
+
+从Jinja2.8开始，可以使用block级set标签来代替一部分数据。这种方法有时可以代替macro。在这种情况下，你不需要使用等号(`=`)和值，只需要写一个变量名就好了。
+
+例子：
+
+```html
+{% set navigation %}
+    <li><a href='/'>Index</a></li>
+    <li><a href='/downloads'>Downloads</a></li>
+{% endset %}
+```
+
+现在变量`navigation`可以代表一块HTML代码。
+
+从Jinja2.10开始，block级set标签可以接受filter：
+
+```html
+{% set reply | wordwrap %}
+    You wrote:
+    {{ message }}
+{% endset %}
+```
+
+### Extends
+
+`extends`标签可以让一个模版扩展另一个模版(也可以理解为继承)。你可以在一个文件中拥有多个`extends`标签，但是只会执行它们中的一个。
+
+### Blocks
+
+Block用于模版继承，可以将它看作是占位符。
+
+### Include
+
+pass
