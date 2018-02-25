@@ -772,4 +772,517 @@ Block用于模版继承，可以将它看作是占位符。
 
 ### Import
 
-pass
+Jinja2支持把常用的代码放到Macro中。macros可以放在不同的模版中，然后引入到一起。这很类似于Python中的import机制。但是你有必要知道import的macro是会缓存的，import的模版不会访问当前模版的变量，而默认使用全局的变量。
+
+有两种方式可以引入模版。你可以引入一个完整到模版到一个变量，或者通过macro。
+
+假设我们有一个helper模块可以用来渲染form(命名为`forms.html`):
+
+```html
+{% macro input(name, value='', type='text') -%}
+    <inpu type='{{ type }}' value='{{ value|e }}'
+          name='{{ name }}'>
+{% endmacro %}
+
+{%- macro textarea(name, value='', rows=10, cols=40) -%}
+    <textarea name='{{ name }}' rows='{{ rows }}'
+              cols='{{ cols }}'>{{ value|e }}</textarea>
+{%- endmacro %}
+```
+
+想访问一个模版的变量/macro最简单的方式是把这个模版模块以一个变量来引入。然后你就可以访问它的属性了：
+
+```html
+{% import 'forms.html' as forms %}
+<dl>
+    <dt>Username</dt>
+    <dd>{{ forms.input('username') }}</dd>
+    <dt>Password</dt>
+    <dd>{{ form.input('password', type='password') }}</dd>
+</dl>
+<p>{{ form.textare('comment') }}</p>
+```
+
+另外你可以引入特定的变量并且为它取别名：
+
+```html
+{% from 'form.html' import input as input_field, textarea %}
+<dl>
+    <dt>Username</dt>
+    <dd>{{ input_field('username') }}</dd>
+    <dt>Password</dt>
+    <dd>{{ input_field('password', type='password') }}</dd>
+</dl>
+<p>{{ textarea('comment') }}</p>
+```
+
+Macro和变量如果以下划线开头，则视为私有，不能没引入。
+
+## Import Context Behavior
+
+默认情况下，包含的(included)模版会传入到当前的context中而引用的(imported)模版则不会。这是因为引入的模版是会缓存的；因为import会很频繁。
+
+这个行为是可以修改的：可以加入`with context`或者`wintout context`来修改它们默认行为。如果传入到当前的contxt则会关闭缓存。
+
+下面是两个例子:
+
+```html
+{% from 'forms.html' import input with context %}
+{% include 'header.html' without context %}
+```
+
+## Expressions
+
+Jinja2允许基本的表达式。他们可以常规Python表达式类似；不过可能和你所期望的并不一致：
+
+### Literal
+
+最简单的形式是字面量。字面量代表Python的字符串或者数字等对象。存在以下的字面量：
+
+- "Hello World"
+
+    任何在一对单/双引号之间的都是字符串。
+
+- 42 / 42.23
+
+    整数和浮点数通过直接写入即可创建。
+
+- ['list', 'of', 'objects']
+
+    在两个括号之间的就是list。
+
+- (‘tuple’, ‘of’, ‘values’)
+
+    元组和Python中的元组也一样。
+
+- {‘dict’: ‘of’, ‘key’: ‘and’, ‘value’: ‘pairs’}
+
+    字典也一样。
+
+- true / false
+
+    true总是true，false就是false。
+
+> Note
+>
+>> 特殊常量true, false和none都是小写形式。
+
+### Math
+
+Jinja2允许你对值进行计算。支持以下的运算符：
+
+- `+`
+
+- `-`
+
+- `/`
+
+- `//`
+
+- `%`
+
+- `*`
+
+- `**`
+
+### Comparisons
+
+- `==`
+
+- `!=`
+
+- `>`
+
+- `>=`
+
+- `<`
+
+- `<=`
+
+### Logic
+
+- `and`
+
+- `or`
+
+- `not`
+
+- `(expr)`
+
+### Other Operators
+
+- `in`
+
+- `is`: 作用于test
+
+- `|`: 作用于filter
+
+- `~`: 将所有操作数转换为字符串然后串联它们
+
+- `()`: 调用一个callable.
+
+- `./[]`: 获取对象的属性.
+
+### If Expression
+
+另外可以使用内联if表达式(三元表达式).
+
+`{% extends layout_template if layout_template is defined else 'master.html' %}`
+
+## List of Builtin Filters
+
+- `asb(number)`
+
+    返回一个参数的绝对值。
+
+- `attr(obj, name)`
+
+    获取一个对象的属性。`foo|attr('bar')`类似`foo.bar`，不过后者也有可能会访问索引。
+
+- `batch(value, linecount, fill_with=None)`
+
+    批处理item的filter。它很像`slice`。在提供第二个参数的时候，将会作为默认值填充缺失的索引：
+
+    ```html
+    <table>
+    {%- for row in items|batch(3, '&nbsp;') %}
+        <tr>
+        {%- for column in row %}
+            <td>{{ column }}</td>
+        {%- endfor %}
+        </tr>
+    {%- endfor %}
+    </table>
+    ```
+
+- `capitalize(s)`
+
+    将这个值capitalize。首个字符会变为大写，其它字符都小写。
+
+- `center(value, width=80)`
+
+    通过一个给定的宽度来把一个值在一个字段中居中。
+
+- `default(value, defailt_value=u'', boolean=False)`
+
+    如果这个变量值是undefined，将会返回传入的默认值，否则还是返回变量的值。
+
+    `{{ my_variable | default('my_variable is not defined') }}`
+
+    如果你想要根据判断值是否为False来判断值是否定义：
+
+    `{{ ''|default('the string was empty', true) }}`
+
+    **Aliased**: `d`
+
+ - `dictsort(value, case_sensitive=False, by='key', reverse=False)`
+
+    排序一个字典，yield (key, value)对。因为Python字典是无序的，你可能需要这个函数来排序字典：
+
+    ```html
+    {% for item in mydict|dictsort %}
+        通过key来排序一个字典，不区分大小写
+        
+    {% for item in mydict|dicsort(reverse=True) %}
+        通过key来排序一个字典，不区分大小写，逆序。
+
+    {% for item in mydict|dictsort(true) %}
+        通过key来排序一个字典，区分大小写
+
+    {% for item in mydict|dictsort(false, 'value') %}
+        通过value来排序一个字典，不区分大小写
+    ```
+
+- `excape(s)`
+
+    将字符`&`, `<`, `>`, `'`和`"`转换为HTML安全的字符。如果你不确定数据是否HTML安全，那么就使用它。
+
+    **Aliased**: `e`
+
+- `filesizeformat(value, binary=False)`
+
+    将一个值变成“易读”的文件size格式(比如13kb, 4.1MB, 102Bytes...).
+
+- `first(seq)`
+
+    返回一个序列的第一个item。
+
+- `float(value, default=0.0)`
+
+    将一个值转换为浮点数。如果不能转换，将还返回默认值.
+
+- `forceescape(value)`
+
+    强制HTML转义。
+
+- `format(value, *args, **kwargs)`
+
+    将一个对象应用python字符串格式化：
+
+    ```html
+    {{ "%s - %s"|format('Hello?', 'Foo') }}
+        -> Hello? - Foo!
+    ```
+
+- `groupby(value, attribute)`
+
+    通过一个通用属性来对一个序列的对象进行分组。
+
+    如果你有一个list，list里面是dict或者对象它们代表person和gender，first_name, 和last_name属性，你想要根据gender来分组所有的用户：
+
+    ```html
+    <ul>
+    {% for group in persons|groupby('gender') %}
+        <li>{{ group.grouper }}</li>
+        {% for person in group.list %}
+            <li>{{ person.first_name }} {{ person.last_name }}</li>
+        {% enfor %}
+    {% endfor %}
+    </ul>
+    ```
+
+    也可以使用tuple来把grouper和list给unpack：
+
+    ```html
+    <ul>
+    {% for grouper, list in persons|groupby('gender')  %}
+        ...
+    {% endfor %}
+    </ul>
+    ```
+
+    你可以看到，用来分组的属性被存储到了`.grouper`属性中，`.list`属性包含分组的数据。
+
+- `indent(s, width=4, first=False, blank=False, indentfirst=None)`
+
+    返回一个字符串的拷贝，每一行会缩进4个空格。首行和空白行默认是不会缩进的。
+
+    参数：
+
+    - `width`: 锁进的空格数量
+    - `first`: 是否缩进首行
+    - `black`: 是否缩进空白行
+
+- `int(value, default=0, base=10)`
+
+    将一个值转换为整数。如果不能转换，将会返回默认值。base参数代表转换整数的进制，默认是10进制。
+
+- `join(value, d=u'', attribute=None)`
+
+    将一个序列中所有字符串串联起来的字符串。默认使用空字符串作为分隔符来链接：
+
+    ```html
+    {{ [1, 2, 3]|join('|') }}
+        -> 1|2|3
+
+    {{ [1, 2, 3]|join }}
+        -> 123
+    ```
+
+    也可以将一组对象的属性join起来：
+
+    ```html
+    {{ users|join(', ', attribute='username') }}
+    ```
+
+- `last(seq)`
+
+    返回一个序列的最后一个item。
+
+- `length(object)`
+
+    返回一个序列对象或者映射对象的长度。
+
+    **Aliases**: `count`
+
+- `list(value)`
+
+    将这个value转换为list。如果传入一个字符串，那么会返回一个字符list。
+
+- `lower(s)`
+
+    将一个值转换为小写。
+
+- `map()`
+
+    将一个filter应用到一个序列的每个对象上面。
+
+    基础用法是映射到一个属性。想象你有一个users list，但是你只对它的username属性感兴趣：
+
+    `Users on this page: {{ users|map(attribute='username')|join(', ') }}`
+
+    传入filter应用以filter字符串名称形式传入：
+
+    `Users on this page: {{ titles|map('lower')|join(', ') }}`
+
+- `max(value, case_sensitive=False, attribute=None)`
+
+    返回这个序列对象中的最大item。
+
+    ```html
+    {{ [1, 2, 3] | max }}
+        -> 3
+    ```
+
+    参数：
+
+    - `case_sensitive`: 在比较的时候是否对大小写敏感
+    - `attribute`: 使用这个对象的某个属性来比较
+
+- `min(value, verbose=False)`
+
+    将这个变量进行美观打印。常用于debugging。
+
+- `random(seq)`
+
+    返回一个序列对象中的一个随机item。
+
+- `reject()`
+
+    对一个序列中每个item进行test，将测试成功的对象剔除。
+
+    如果没有指定test，将会使用bool测试。
+
+    使用例子：
+
+    `{{ numbers | reject('odd') }}`
+
+- `rejectattr()`
+
+    对一个序列中每个对象的属性来进行test，将测试成功的对象剔除。
+
+    如果没有指定test，将会使用bool测试。
+
+    ```html
+    {{ users|rejectattr('is_active') }}
+    {{ users|rejectattr('email', 'none') }}
+    ```
+
+- `replace(s, old, new, count=None)`
+
+    返回一个字符串的拷贝，将会把所有出现的字串都替换成新的。如果指定了可选参数`count`，将会把首先出现`count`次的字串替换：
+
+    ```html
+    {{ 'Hello World'|replace('Hello', 'GoodBye') }}
+        -> Goodbye World
+
+    {{ 'aaaaargh'|replace('a', "d'oh, ", 2) }}
+        -> d'oh, d'oh, aaargh
+    ```
+
+- `reverse(value)`
+
+    将一个对象reverse。
+
+- `round(value, precision=0, method='common')`
+
+    将一个数字以给定的精度来round。指定的首个参数是`precision`(默认为0)，第二个参数是round方法：
+
+    - `common`：向上或向下round
+    - `ceil`: 向上round
+    - `floor`: 向下round
+
+    默认会使用`common`方法.
+
+    ```html
+    {{ 42.55|round }}
+        -> 43.0
+    {{ 42.55|round(1, 'floor') }}
+        -> 42.5
+    ```
+
+    注意这个filter总是会返回给你浮点数。
+
+- `safe(value)`
+
+    标记这个值是safe的，意味着在自动转义的环境下这个变量不会被转义。
+
+- `select()`
+
+    通过对每个对象进行test来筛选一个对象序列，只会选择test成功的对象。
+
+    如果没有指定test，将会默认使用bool test.
+
+    使用例子：
+
+    ```html
+    {{ numbers|select('odd') }}
+    {{ numbers|select('odd') }}
+    {{ numbers|select("divisibleby", 3) }}
+    {{ numbers|select("lessthan", 42) }}
+    {{ strings|select("equalto", "mystring") }}
+    ```
+
+- `selectattr()`
+
+    和上面例子一样，不过针对属性来select。
+
+    使用例子：
+
+    ```html
+    {{ users|selectattr("is_active") }}
+    {{ users|selectattr("email", "none") }}
+    ```
+
+- `slice(value, slices, fill_with=None)`
+
+    对一个序列对象进行切片。
+
+    ```html
+    <div class='columnwrapper'>
+        {%- for column in items|slice(3) %}
+            <ul class="column-{{ loop.index }}">
+            {% for item in column %}
+                <li>{{ item }}</li>
+            {% endfor %}
+            </ul>
+        {%- endfor %}
+    </div>
+    ```
+
+    如果你传入第二个参数，它会用来填充最后一次迭代缺失的值。
+
+- `sort(value, reverse=False, case_sensitive=False, attribute=None)`
+
+    对一个iterable进行排序。默认是升序，如果你在第一个参数传入True，那么就会使用降序排序。
+
+    第二个参数可以决定排序时是否区分大小写：
+
+    ```html
+    {% for item in iterable|sort %}
+        ...
+    {% endfor %}
+    ```
+
+    也可以根据一个数据来排序：
+
+    ```html
+    {% for item in iterable|sort(attribute='date') %}
+    {% endfor %}
+    ```
+    
+- `string(object)`
+
+    将一个字符串转换为unicode。
+
+- `striptags(value)`
+
+    移除一个值的SGML/XML标签。
+
+- `sum(iterable, attribute=None, start=0)`
+
+    返回一个序列对象的sum。
+
+    也可以sum一个特定的属性：
+
+    ```html
+    Total: {{ items|sum(attribute='price') }}
+    ```
+
+- `title(s)`
+
+    返回一个值的title格式。即，首字符大写，其它字符都小写。
+
+- `tojson(value, indent=None)`
+
+    pass
