@@ -770,6 +770,292 @@ From https://github.com/paulboone/ticgit
 
 ### Inspecting a Remote
 
+如果你想要查看一个特定remote的更多信息，你可以使用`git remote show <remote>`命令。
 
+```shell
+$ git remote show origin
+* remote origin
+  Fetch URL: https://github.com/schacon/ticgit
+  Push  URL: https://github.com/schacon/ticgit
+  HEAD branch: master
+  Remote branches:
+    master                               tracked
+    dev-branch                           tracked
+  Local branch configured for 'git pull':
+    master merges with remote master
+  Local ref configured for 'git push':
+    master pushes to master (up to date)
+```
 
+### Renaming and Removing Remotes
 
+你可以执行`git remote rename`命令来修改一个remote的短名称。例如，你可以把pb改为paul：
+
+```shell
+$ git remote rename pb paul
+$ git remote
+origin
+paul
+```
+
+如果你出于某些原因想要移除一个remote，可以使用`git remote rm/remove`命令：
+
+```shell
+$ git remote remove paul
+$ git remote
+origin
+```
+
+## Git Basics - Tagging
+
+### Tagging
+
+很多数版本控制工具一样，你可以使用tag标记一些commit。
+
+#### Listing Your Tags
+
+想要直接列出Git仓库的tag清单。只需要输入`git tag`就可以了：
+
+```shell
+$ git tag
+v0.1
+v0.3
+```
+
+这个commit顺序是以字母表为顺序的；不过顺序其实并不重要。
+
+你也可以根据一个特定的规则模式来搜索tag。如果一个Git仓库，包含超过500个tag，如果你只对1.8.5系列感兴趣：
+
+```shell
+$ git tag -l "v1.8.5*"
+v1.8.5
+v1.8.5-rc0
+v1.8.5-rc1
+v1.8.5-rc2
+v1.8.5-rc3
+v1.8.5.1
+v1.8.5.2
+v1.8.5.3
+v1.8.5.4
+v1.8.5.5
+```
+
+使用通配符列tag清单需要使用`-l`或者`--list`选项。
+
+### Creating Tags
+
+Git支持两种类型的tag：轻量级(lightweight)和标记型(annotated)。
+
+轻量级标签很像不作改动的分支 -- 它只是一个特定commit的指针。
+
+标记型标签，将会把所有的对象都存储到Git数据库中。它们已经被checksum了；包含tagger名称，email和日期；以及一个tagging message；可以使用GNU Privacy Guard来进行签名和验证。一般推荐使用标记型标签，不过如果你只想要一个临时标签，那么轻量级标签更适合。
+
+### Annotated Tags
+
+在Git中创建一个标记型标签很简单。最简单的方式是执行`git tag`命令的时候加入`-a`选项：
+
+```shell
+$ git tag -a v1.4 -m "my version 1.4"
+$ git tag
+v0.1
+v1.3
+v1.4
+```
+
+`-m`选项可以指定tagging message，它会存储到这个tag中。
+
+你可以使用`git show`命令来展示一个tag相关的信息:
+
+```shell
+$ git show v1.4
+tag v1.4
+Tagger: Ben Straub <ben@straub.cc>
+Date:   Sat May 3 20:19:12 2014 -0700
+
+my version 1.4
+
+commit ca82a6dff817ec66f44342007202690a93763949
+Author: Scott Chacon <schacon@gee-mail.com>
+Date:   Mon Mar 17 21:52:11 2008 -0700
+
+    changed the version number
+```
+
+### Lightweight Tags
+
+想要创建一个轻量级标签，只需要传入标签名称就行了，不要传入`-a`, `-s`或`-m`任一的一个选项：
+
+```shell
+$ git tag v1.4-1w
+$ git tag
+v0.1
+v1.3
+v1.4
+v1.4-lw
+v1.5
+```
+
+这次，再使用`git show`命令不会展示额外的tag信息。
+
+```shell
+$ git show v1.4-lw
+commit ca82a6dff817ec66f44342007202690a93763949
+Author: Scott Chacon <schacon@gee-mail.com>
+Date:   Mon Mar 17 21:52:11 2008 -0700
+
+    changed the version number
+```
+
+### Tagger Later
+
+假设你的commit历史如下：
+
+```shell
+$ git log --pretty=oneline
+15027957951b64cf874c3557a0f3547bd83b3ff6 Merge branch 'experiment'
+a6b4c97498bd301d84096da251c98a07c7723e65 beginning write support
+0d52aaab4479697da7686c15f77a3d64d9165190 one more thing
+6d52a271eda8725415634dd79daabbc4d9b6008e Merge branch 'experiment'
+0b7434d86859cc7b8c3d5e1dddfed66ff742fcbc added a commit function
+4682c3261057305bdd616e23b64b0857d832627b added a todo file
+166ae0c4d3f420721acbb115cc33848dfcc2121a started write support
+9fceb02d0ae598e95dc970b74767f19372d61af8 updated rakefile
+964f16d36dfccde844893cac5b347e7b3d44abbc commit the todo
+8a5cbc430f1a9c3d00faaeffd07798508422908a updated readme
+```
+
+现在，假设你忘记项目中的v1.2标签需要标记"updated rakefile"commit。你可以时候加入这个标签，只要把这个commit的checksum(或者一部分)加入到命令末尾即可：
+
+`$ git tag -a v1.2 9fceb02`
+
+现在可以看到你新加入的标签了：
+
+```shell
+$ git tag
+v0.1
+v1.2
+v1.3
+v1.4
+v1.4-lw
+v1.5
+
+$ git show v1.2
+tag v1.2
+Tagger: Scott Chacon <schacon@gee-mail.com>
+Date:   Mon Feb 9 15:32:16 2009 -0800
+
+version 1.2
+commit 9fceb02d0ae598e95dc970b74767f19372d61af8
+Author: Magnus Chacon <mchacon@gee-mail.com>
+Date:   Sun Apr 27 20:43:35 2008 -0700
+
+    updated rakefile
+...
+```
+
+### Sharing Tags
+
+默认情况下，`git push`命令不会把tag移交给远程服务器。你需要显式指定把tag推送到服务器，就像分享远程分支一样：`git push origin <tagname>`
+
+```shell
+$ git push origin v1.5
+Counting objects: 14, done.
+Delta compression using up to 8 threads.
+Compressing objects: 100% (12/12), done.
+Writing objects: 100% (14/14), 2.05 KiB | 0 bytes/s, done.
+Total 14 (delta 3), reused 0 (delta 0)
+To git@github.com:schacon/simplegit.git
+ * [new tag]         v1.5 -> v1.5
+```
+
+如果你想要一次性推送所有的tag，可以使用`--tags`选项：
+
+```shell
+$ git push origin --tags
+$ git push origin --tags
+Counting objects: 1, done.
+Writing objects: 100% (1/1), 160 bytes | 0 bytes/s, done.
+Total 1 (delta 0), reused 0 (delta 0)
+To git@github.com:schacon/simplegit.git
+ * [new tag]         v1.4 -> v1.4
+ * [new tag]         v1.4-lw -> v1.4-lw
+```
+
+### Checking out Tags
+
+如果你想要检查一个tag的文件，你可以使用`git checkout`，它会让你的仓库出于"detached HAED"状态：
+
+```shell
+$ git checkout 2.0.0
+Note: checking out '2.0.0'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by performing another checkout.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -b with the checkout command again. Example:
+
+  git checkout -b <new-branch>
+
+HEAD is now at 99ada87... Merge pull request #89 from schacon/appendix-final
+
+$ git checkout 2.0-beta-0.1
+Previous HEAD position was 99ada87... Merge pull request #89 from schacon/appendix-final
+HEAD is now at df3f601... add atlas.json and cover image
+```
+
+在"detached HEAD"状态中。如果你修改了一些文件并commit，这个标签仍然会存在，不过这个commit不会属于任何分支，也不可获取，除非指定这个commit hash。
+
+## 2.7 Git Basics - Git Aliases
+
+### Git Aliases
+
+在我们结束这个章节之前，再介绍一个方便的工具: `aliases`.
+
+如果你只输入了命令的一部分，Git不会为你自动补全。如果你不想完整的输入整个命令，你可以使用`git config`来设置alias：
+
+```shell
+$ git config --global alias.co checkout
+$ git config --global alias.br branch
+$ git config --global alias.ci commit
+$ git config --global alias.st status
+```
+
+显而易见，可以看到上面例子把一些命令进行了简化。
+
+这个技术也可以为你创建复合命令：
+
+`$ git conifg --global alias.unstage 'reset HEAD --'`
+
+然后下面两个命令就相等了：
+
+```shell
+$ git unstage fileA
+$ git reset HEAD -- fileA
+```
+
+比如可以加入一个`last`命令，让你简单的看最后一个commit：
+
+`$ git config --global alias.last 'log -1 HEAD'`
+
+使用它：
+
+```shell
+$ git last
+commit 66938dae3329c7aebe598c2246a8e6af90d04646
+Author: Josh Goebel <dreamer3@example.com>
+Date:   Tue Aug 26 19:48:51 2008 +0800
+
+    test for current head
+
+    Signed-off-by: Scott Chacon <schacon@example.com>
+```
+
+## 2.8 Git Basics - Summary
+
+### Summary
+
+在这个章节我们教你克隆一个仓库，创建改动，staging以及提交这些commits，以及可以查看所有commit的历史。
+
+下一个章节，我们会开始讲Git的杀手级特性：分支模型(Branch Model).
