@@ -446,3 +446,330 @@ $ git add README
 ```
 
 Git会隐式的算出文件的重命名。所以`git mv`其实是三个命令的一个合成体。另外，你可以使用其它任何方式来将文件重命名，然后在提交之前手动进行`add/rm`.
+
+## 2.3 Git Basics - Viewing the Commit History
+
+### Viewing the Commit History
+
+在你进行几次commit之后，你可以回头看看做了些什么。最基础的一个子命令是`git log`.
+
+我们用一个简单的项目`simplegit`来作实验:
+
+`$ git clone https://github.com/schacon/simplegit-progit`
+
+当你在这个项目中执行`git log`时，你可能会获得如下输出：
+
+```shell
+$ git log
+commit ca82a6dff817ec66f44342007202690a93763949
+Author: Scott Chacon <schacon@gee-mail.com>
+Date:   Mon Mar 17 21:52:11 2008 -0700
+
+    changed the version number
+
+commit 085bb3bcb608e1e8451d4b2432f8ecbe6306e7e7
+Author: Scott Chacon <schacon@gee-mail.com>
+Date:   Sat Mar 15 16:40:33 2008 -0700
+
+    removed unnecessary test
+
+commit a11bef06a3f659402fe7563abf99ad00de2209e6
+Author: Scott Chacon <schacon@gee-mail.com>
+Date:   Sat Mar 15 10:31:28 2008 -0700
+
+    first commit
+```
+
+还有一个强大的选项`-p`或者`--patch`，它可以展示每次提交之间的区别。你可以限制显示的log数量，比如使用`-2`来显示最近的两条：
+
+```shell
+$ git log -p -2
+commit ca82a6dff817ec66f44342007202690a93763949
+Author: Scott Chacon <schacon@gee-mail.com>
+Date:   Mon Mar 17 21:52:11 2008 -0700
+
+    changed the version number
+
+diff --git a/Rakefile b/Rakefile
+index a874b73..8f94139 100644
+--- a/Rakefile
++++ b/Rakefile
+@@ -5,7 +5,7 @@ require 'rake/gempackagetask'
+ spec = Gem::Specification.new do |s|
+     s.platform  =   Gem::Platform::RUBY
+     s.name      =   "simplegit"
+-    s.version   =   "0.1.0"
++    s.version   =   "0.1.1"
+     s.author    =   "Scott Chacon"
+     s.email     =   "schacon@gee-mail.com"
+     s.summary   =   "A simple gem for using Git in Ruby code."
+
+commit 085bb3bcb608e1e8451d4b2432f8ecbe6306e7e7
+Author: Scott Chacon <schacon@gee-mail.com>
+Date:   Sat Mar 15 16:40:33 2008 -0700
+
+    removed unnecessary test
+
+diff --git a/lib/simplegit.rb b/lib/simplegit.rb
+index a0a60ae..47c6340 100644
+--- a/lib/simplegit.rb
++++ b/lib/simplegit.rb
+@@ -18,8 +18,3 @@ class SimpleGit
+     end
+
+ end
+-
+-if $0 == __FILE__
+-  git = SimpleGit.new
+-  puts git.show
+-end
+```
+
+另外，如果你看每个commit的缩略统计信息，可以使用`--stat`选项：
+
+```shell
+$ git log --stat
+commit ca82a6dff817ec66f44342007202690a93763949
+Author: Scott Chacon <schacon@gee-mail.com>
+Date:   Mon Mar 17 21:52:11 2008 -0700
+
+    changed the version number
+
+ Rakefile | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+commit 085bb3bcb608e1e8451d4b2432f8ecbe6306e7e7
+Author: Scott Chacon <schacon@gee-mail.com>
+Date:   Sat Mar 15 16:40:33 2008 -0700
+
+    removed unnecessary test
+
+ lib/simplegit.rb | 5 -----
+ 1 file changed, 5 deletions(-)
+
+commit a11bef06a3f659402fe7563abf99ad00de2209e6
+Author: Scott Chacon <schacon@gee-mail.com>
+Date:   Sat Mar 15 10:31:28 2008 -0700
+
+    first commit
+
+ README           |  6 ++++++
+ Rakefile         | 23 +++++++++++++++++++++++
+ lib/simplegit.rb | 25 +++++++++++++++++++++++++
+ 3 files changed, 54 insertions(+)
+```
+
+另外还有一个有用的选项是`--pretty`.可以传入`oneline`, `short`，`full`和`fuller`.
+
+```shell
+$ git log --pretty=oneline
+ca82a6dff817ec66f44342007202690a93763949 changed the version number
+085bb3bcb608e1e8451d4b2432f8ecbe6306e7e7 removed unnecessary test
+a11bef06a3f659402fe7563abf99ad00de2209e6 first commit
+```
+
+最有意思的一个pretty选项是`format`，你可以通过它来修改输出的格式：
+
+```shell
+$ git log --pretty=format:"%h - %an, %ar : %s"
+ca82a6d - Scott Chacon, 6 years ago : changed the version number
+085bb3b - Scott Chacon, 6 years ago : removed unnecessary test
+a11bef0 - Scott Chacon, 6 years ago : first commit
+```
+
+`oneline`和`format`都可以应用一个选项`--graph`。这个选项可以向你展示一个ASCII graph，代表分支和合并的历史：
+
+```shell
+$ git log --pretty=format:"%h %s" --graph
+* 2d3acf9 ignore errors from SIGCHLD on trap
+*  5e3ee11 Merge branch 'master' of git://github.com/dustin/grit
+|\
+| * 420eac9 Added a method for getting the current branch.
+* | 30e367c timeout code and tests
+* | 5a09431 add timeout protection to grit
+* | e1193f8 support for heads with slashes in them
+|/
+* d6016bc require time for xmlschema
+*  11d191e Merge branch 'defunkt' into local
+```
+
+### Limiting Log Output
+
+使用`--since`和`--until`可以根据时间来限制输出：
+
+`$ git log --since=2.weeks`
+
+## 2.4 Git Basics - Undoing Things
+
+### Undoing Things
+
+在任何时候，你都可能想用撤销一些操作。有若干工具可以进行这种操作，不过小心，不能撤销撤销操作。
+
+第一个unto操作是，修改你的commit(并且替换message)，可以使用`--amend`选项：
+
+`$ git commit --amend`
+
+作为一个例子，如果你commit之后发现你忘记把修改的文件stage并加入到这个commit：
+
+```shell
+$ git commit -m "initial commit"
+$ git add forgotten_file
+$ git commit --amend
+```
+
+第二个commit江湖替换之前的一个。
+
+### Unstaging a Staged File
+
+举例来说，你修改了两个文件，像把它们做两次单独的commit，但是不小心输入了`git add *`，怎么将它们中的一个解除stage呢？`git status`提醒了你：
+
+```shell
+$ git add *
+$ git status
+On branch master
+Changes to be committed:
+  (use "git reset HEAD <file>..." to unstage)
+
+    renamed:    README.md -> README
+    modified:   CONTRIBUTING.md
+```
+
+你可以看到`git reset HEAD <file>...`可以解除stage：
+
+```shell
+$ git reset HEAD CONTRIBUTING.md
+Unstaged changes after reset:
+M	CONTRIBUTING.md
+$ git status
+On branch master
+Changes to be committed:
+  (use "git reset HEAD <file>..." to unstage)
+
+    renamed:    README.md -> README
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git checkout -- <file>..." to discard changes in working directory)
+
+    modified:   CONTRIBUTING.md
+```
+
+### Unmodifying a Modified File
+
+如果你发现你不想保持对`CONTRUBUTING.md`文件呢？怎么把它解除修改？将它转换到上一次提交的状态？`git status`同样告诉了你应该怎么做：
+
+```shell
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git checkout -- <file>..." to discard changes in working directory)
+
+    modified:   CONTRIBUTING.md
+```
+
+可以使用`git checkout -- <file>...`
+
+```shell
+$ git checkout -- CONTRIBUTING.md
+$ git status
+On branch master
+Changes to be committed:
+  (use "git reset HEAD <file>..." to unstage)
+
+    renamed:    README.md -> README
+```
+
+## Git Basics - Working with Remotes
+
+### Working with Remotes
+
+### Showing Your Remotes
+
+想要看你配置了那个remote server，你可以执行`git remote`命令.它会返回remote的简写名称。如果你的仓库来自克隆，你应该至少会看到`origin`:
+
+```shell
+$ git clone https://github.com/schacon/ticgit
+Cloning into 'ticgit'...
+remote: Reusing existing pack: 1857, done.
+remote: Total 1857 (delta 0), reused 0 (delta 0)
+Receiving objects: 100% (1857/1857), 374.35 KiB | 268.00 KiB/s, done.
+Resolving deltas: 100% (772/772), done.
+Checking connectivity... done.
+$ cd ticgit
+$ git remote
+origin
+```
+
+你可以指定`-v`选项来看Git remote的详细信息，包括URL和用于读或者写：
+
+```shell
+$ git remote -v
+origin	https://github.com/schacon/ticgit (fetch)
+origin	https://github.com/schacon/ticgit (push)
+```
+
+如果你有多个remote，它们也会全部列出来：
+
+```shell
+$ cd grit
+$ git remote -v
+bakkdoor  https://github.com/bakkdoor/grit (fetch)
+bakkdoor  https://github.com/bakkdoor/grit (push)
+cho45     https://github.com/cho45/grit (fetch)
+cho45     https://github.com/cho45/grit (push)
+defunkt   https://github.com/defunkt/grit (fetch)
+defunkt   https://github.com/defunkt/grit (push)
+koke      git://github.com/koke/grit.git (fetch)
+koke      git://github.com/koke/grit.git (push)
+origin    git@github.com:mojombo/grit.git (fetch)
+origin    git@github.com:mojombo/grit.git (push)
+```
+
+### Adding Remote Repositories
+
+在执行`git clone`的时候，会自动为你添加一个remote - `origin`。想要自定义创建一个remote，可以执行`git remote add <shortname> <url>`:
+
+```shell
+$ git remote
+origin
+$ git remote add pb https://github.com/paulboone/ticgit
+$ git remote -v
+origin	https://github.com/schacon/ticgit (fetch)
+origin	https://github.com/schacon/ticgit (push)
+pb	https://github.com/paulboone/ticgit (fetch)
+pb	https://github.com/paulboone/ticgit (push)
+```
+
+你可以执行`git fetch pb`:
+
+```shell
+$ git fetch pb
+remote: Counting objects: 43, done.
+remote: Compressing objects: 100% (36/36), done.
+remote: Total 43 (delta 10), reused 31 (delta 5)
+Unpacking objects: 100% (43/43), done.
+From https://github.com/paulboone/ticgit
+ * [new branch]      master     -> pb/master
+ * [new branch]      ticgit     -> pb/ticgit
+```
+
+### Fetching and Pulling from Your Remotes
+
+想要从一个remote项目中获取数据：
+
+`$ git fetch <remote>`
+
+请注意，`git fetch`只会把数据下载到你的本地仓库 - 它不会自动合并。
+
+你可以使用`git pull`命令来自动fetch，然后把远程分支合并到当前的分支。
+
+### Pushing to Your Remotes
+
+如果你想要把你本地的项目仓库推送给一个upstream。可以使用一个简单的命令:`push <remote> <branch>`:
+
+`$ git push origin master`
+
+### Inspecting a Remote
+
+
+
+
