@@ -1489,4 +1489,117 @@ Jinja2允许你对值进行计算。支持以下的运算符：
 
 ## List of Global Functions
 
-pass 
+全局域可以使用以下这些函数：
+
+- `range([start, ]stop[, step])`
+
+    类似Python内置函数`range()`
+
+- `lipsum(n=5, html=True, min=20, max=100)`
+
+    对模版生成一些乱文。默认会生成5段HTML文本，每段包含20～100个单词(min和max参数)。如果html参数传入False，那么只会返回普通文本。
+
+- `dict(**items)`
+
+    类似`dict`构造器。
+
+- class`cycler(*items)`
+
+    cycler类似`loop.cycle`。不过你可以将这个用在循环外面。
+
+    下面是一个示例：
+
+    ```html
+    {% set row_class = cycler('odd', 'even') %}
+    <ul class='browser'>
+    {% for folder in folders %}
+        <li class="folder {{ row_class.next() }}">{{ folder|e }}</li>
+    {% endfor %}
+    {% for filename in files %}
+        <li class="file {{ row_class.next() }}">{{ filename|e }}</li>
+    {% endfor %}
+    </ul>
+    ```
+
+    cycler对象包含以下属性和方法：
+
+    - `reset()`
+
+        将cycler重置为首个item。
+
+    - `next()`
+
+        将cycler转到下一个item，并返回当前的item。
+
+    - `current`
+
+        返回当前的item。
+
+- class`joiner(sep=',')`
+
+    一个helper，可以用来join多个section。除了首次调用，其它时候每次对一个joiner传入一个字符串后都会返回一个总joined字符串。
+
+    示例：
+
+    ```html
+    {% set pipe = joiner("|") %}
+    {% if categories %} {{ pipe() }}
+        Categories {{ categories|join(', ') }}
+    {% endif %}
+    {% if author %} {{ pipe() }}
+        Author: {{ author() }}
+    {% endif %}
+    {% if can_edit %} {{ pipe() }}
+        <a href='?action=edit'>Edit</a>
+    {% endif %}
+    ```
+
+- class`namespace(...)`
+
+    创建一个容器，可以通过`{% set %}`来赋值：
+
+    ```html
+    {% set ns = namespace() %}
+    {% for item in items %}
+        {% if item.check_something() %}
+            {% set ns.found = true %}
+        {% endif %}
+        * {{ item.title }}
+    {% endfor %}
+    Found item having something: {{ ns.found }}
+    ```
+
+## Extensions
+
+### i18n
+
+主要使用`{% trans %}`
+
+### Expression Statement
+
+如果载入了expression-statement扩展，`do`标签可以作`{{ ... }}`表达式的事情，不过它最后不会渲染任何数据。
+
+`{% do navigation.append('a string') %}`
+
+###  Loop Controls
+
+如果应用开启了`Loop Controls`，就可以在循环中使用`continue`和`break`了。
+
+### With Statement
+
+`{% with %}`语句可以创建一个子域。这个域中定义的变量外面看不到。
+
+## Autoescape Overrides
+
+如果你想要在模版中开启/关闭自动转义：
+
+```html
+{% autoescape true %}
+    Autoescaping is active within this block
+{% endautoescape %}
+
+{% autoescape false %}
+    Autoescaping is inactive within this block
+{% endautoescape %}
+```
+
