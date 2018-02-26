@@ -318,3 +318,131 @@ index 8ebb991..643e24f 100644
 
 `$ git commit`
 
+然后Git会为你打开编辑器，让你输入提交message.
+
+如果打开的是vim:
+
+```txt
+# Please enter the commit message for your changes. Lines starting
+# with '#' will be ignored, and an empty message aborts the commit.
+# On branch master
+# Your branch is up-to-date with 'origin/master'.
+#
+# Changes to be committed:
+#	new file:   README
+#	modified:   CONTRIBUTING.md
+#
+~
+~
+~
+".git/COMMIT_EDITMSG" 9L, 283C
+```
+
+你可以看到默认的commit message会包含`git status`命令的输出（不过被注释了)，你可以加入一些提示你本次提交干了些什么的信息。
+
+另外你可以使用`-m`来快速提交message:
+
+```shell
+$ git commit -m "Story 182: Fix benchmarks for speed"
+[master 463dc4f] Story 182: Fix benchmarks for speed
+ 2 files changed, 2 insertions(+)
+ create mode 100644 README
+```
+
+你会看到这次commit输出了一些关于它自身的信息：你提交的分支(`master`)，commit的SHA-1 checksum(`463dc4f`)，以及有多少文件被修改，插入/移除了多少行代码。
+
+### Skipping the Staging Area
+
+有时使用staging area麻烦了点。如果你想要跳过staging area，Git提供了一个快捷方式。可以在`git commit`加入`-a`选项让Git自动stage，让你可以跳过`git add`的步骤：
+
+```shell
+$ git status
+On branch master
+Your branch is up-to-date with 'origin/master'.
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git checkout -- <file>..." to discard changes in working directory)
+
+    modified:   CONTRIBUTING.md
+no changes added to commit (use "git add" and/or "git commit -a")
+$ git commit -a -m "add new beckmarks"
+[master 83e38c7] added new benchmarks
+ 1 file changed, 5 insertions(+), 0 deletions(-)
+```
+
+### Removing Files
+
+想要从Git中移除文件，你需要将它从你的tracked文件中移除(或者准确来说是想要把它从你staging area中移除)然后并提交。`git rm`命令就是做这事的，并且它会把文件从你的工作目录中移除。
+
+如果你仅仅把一个文件移除。它会在`git status`输出中显示"Changes not staged for commit"
+
+```shell
+$ rm PROJECTS.md
+$ git status
+On branch master
+Your branch is up-to-date with 'origin/master'.
+Changes not staged for commit:
+  (use "git add/rm <file>..." to update what will be committed)
+  (use "git checkout -- <file>..." to discard changes in working directory)
+
+        deleted:    PROJECTS.md
+
+no changes added to commit (use "git add" and/or "git commit -a")
+```
+
+然后，你使用`git rm`，可以看到文件的stage也被移除了：
+
+```shell
+$ git rm PROJECTS.md
+rm 'PROJECTS.md'
+$ git status
+On branch master
+Your branch is up-to-date with 'origin/master'.
+Changes to be committed:
+  (use "git reset HEAD <file>..." to unstage)
+
+    deleted:    PROJECTS.md
+```
+
+如果你已经修改了文件并把它加入到了staging area，你必须使用`-f`选项。
+
+另一种情况是，你想要把文件保持在working tree，但是从staging area中移除。换句话说，你想要把文件留在硬盘中，只是不想让Git继续追踪它了。比如有时你忘记把某些文件加入到`.gitignore`，如一个很大的log文件。可以使用`--cached`选项：
+
+`$ git rm --cached README`
+
+你可以将文件，目录，或者glob模式串传入到`git rm`命令：
+
+`$ git rm log/\*.log`
+
+注意`*`前面的反斜杠`\`。
+
+### Moving Files
+
+Git不会显式地追踪文件的移动。如果你将Git中的一个文件重命名，Git的元数据并不会告诉它你将文件重命名了。不够Git很聪明，它会在之后发现文件的移动。
+
+`git mv`命令可以用来为Git的文件重命名：
+
+`$ git mv file_from file_to`
+
+使用一个示例来展示这个命令，你可以看到操作之后的状态变化，Git将它看作是一个renamed文件：
+
+```shell
+$ git mv README.mv README
+$ git status
+On branch master
+Your branch is up-to-date with 'origin/master'.
+Changes to be committed:
+  (use "git reset HEAD <file>..." to unstage)
+
+    renamed:    README.md -> README
+```
+
+不过，它其实和下列一串命令相等：
+
+```shell
+$ mv README.md README
+$ git rm README.md
+$ git add README
+```
+
+Git会隐式的算出文件的重命名。所以`git mv`其实是三个命令的一个合成体。另外，你可以使用其它任何方式来将文件重命名，然后在提交之前手动进行`add/rm`.
