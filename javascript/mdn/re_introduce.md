@@ -739,3 +739,35 @@ s.lastNameCaps(); // WILLSON
 
 ### Inner functions
 
+Javascript中的函数可以在另一个函数体内声明。嵌套函数的一个重要细节就是可以访问父函数体内的变量：
+
+```javascript
+function parentFunc() {
+    var a = 1;
+
+    function nestedFunc() {
+        var b = 4;
+        return a + b;
+    }
+    return nestedFunc();
+}
+```
+
+## Closures
+
+闭包是JS最强大功能之一 - 但是也往往是最容易出错的部分：
+
+```javascript
+function makeAdder(a) {
+    return function(b) {
+        return a + b;
+    };
+}
+var x = makeAddr(5);
+var y = makeAddr(20);
+x(6);   // 11
+y(7);   // 27
+```
+
+`makeAdder()`函数字如其名：每次以一个函数调用它的时候会创建一个新的“adder”函数。
+
