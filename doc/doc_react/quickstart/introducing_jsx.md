@@ -1,3 +1,0 @@
-# Introducing JSX
-
-pass 
