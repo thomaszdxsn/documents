@@ -328,7 +328,7 @@ def cli():
 
 @cli.command()
 @click.option('--port', default=8000)
-def run_server(port):
+def runserver(port):
     click.echo('Serving on http://127.0.0.1:%d' % port)
 
 
