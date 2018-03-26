@@ -57,9 +57,9 @@ def test_delete_objects():
 def test_get_object():
     response = client.get_object(
         Bucket='dquant1',
-        Key='binance_depth/btcusdt/2018-02-26/part1.csv.gz'
+        Key='bitfinex_depth/xmrusd/2018-03-19/part2.csv.gz'
     )
-    with open('test.csv.gz', 'wb') as f:
+    with open('test2.csv.gz', 'wb') as f:
         f.write(response['Body'].read())
 
 
@@ -70,4 +70,4 @@ if __name__ == '__main__':
     # print('test_list_objects: ', test_list_objects(), end='\n\n')
     # print('test_head_object: ', test_head_object(), end='\n\n')
     # print('test_delete_objects: ', test_delete_objects(), end='\n\n')
-    # test_get_object()
+    test_get_object()
