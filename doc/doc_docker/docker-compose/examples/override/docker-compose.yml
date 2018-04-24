@@ -1,9 +1,0 @@
-web:
-    image: example/my_web_app:latest
-    links:
-        - db
-        - cache
-db:
-    image: postgres:latest
-cache:
-    image: redis:latest
